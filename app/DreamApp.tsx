@@ -39,10 +39,10 @@ const progressOrder: PageState[] = [
 ];
 
 const processingStages = [
-  ["理解梦境", "整理你已经确认的人物、场景与感受"],
-  ["检索条目", "在演示知识条目中寻找主体与条件"],
-  ["核验来源", "检查版本、位置和人工核验状态"],
-  ["组织解释", "把证据与综合说明清楚分开"],
+  ["正在重现梦境", "把你确认过的人物、场景与动作编排成梦境分镜"],
+  ["正在辨认梦象", "聚焦蛇、古井、旧宅以及害怕与好奇的关系"],
+  ["正在核验出处", "检查 P.3908 的版本、位置与人工核验状态"],
+  ["正在组织解释", "把梦境事实、传统资料与综合说明清楚分开"],
 ];
 
 const initialSession = (): AppSession => ({
@@ -209,6 +209,12 @@ function reducer(state: UiState, action: Action): UiState {
       return { ...withSession(state, reviseSession(session, session.structure), "旧解释与旧卡片已失效，请确认最新梦象。"), sourceOpen: false };
     }
     case "goBack": {
+      if (session.step === "result" && session.structure) {
+        return {
+          ...withSession(state, reviseSession(session, session.structure), "已返回梦象确认；修改或直接重新确认后，会生成新修订版结果。"),
+          sourceOpen: false,
+        };
+      }
       const backMap: Partial<Record<PageState, PageState>> = {
         transcript_review: "drafting",
         symbol_review: "transcript_review",
@@ -242,7 +248,8 @@ function formatDuration(seconds: number) {
 
 function AppHeader({ state, dispatch }: { state: UiState; dispatch: React.Dispatch<Action> }) {
   const currentIndex = progressOrder.indexOf(state.session.step);
-  const canGoBack = !["drafting", "result"].includes(state.session.step);
+  const canGoBack = state.session.step !== "drafting";
+  const backLabel = state.session.step === "result" ? "返回梦象确认" : "返回";
 
   return (
     <header className="app-header">
@@ -254,7 +261,7 @@ function AppHeader({ state, dispatch }: { state: UiState; dispatch: React.Dispat
           aria-hidden={!canGoBack}
           tabIndex={canGoBack ? 0 : -1}
         >
-          <span aria-hidden="true">←</span> 返回
+          <span aria-hidden="true">←</span> {backLabel}
         </button>
         <button type="button" className="brand brand-button" onClick={() => {
           if (window.confirm("清除本次梦境并回到首页？")) dispatch({ type: "clear" });
@@ -459,19 +466,52 @@ function ClarifyingPage({ dispatch }: { dispatch: React.Dispatch<Action> }) {
 }
 
 function ProcessingPage({ state, dispatch }: { state: UiState; dispatch: React.Dispatch<Action> }) {
+  const stage = processingStages[state.processingIndex];
+  const progress = [24, 49, 74, 96][state.processingIndex];
+  const hasSnake = state.session.structure?.objects.includes("蛇");
+
   return (
-    <section className="flow-page narrow-flow processing-page page-enter" aria-live="polite">
-      <FlowHeading kicker="解析梦境 · 04" title="让证据先于解释" copy="以下只是可见的处理阶段，不展示模型内部推理。当前原型使用固定数据模拟处理。" />
-      <ol className="processing-list">
-        {processingStages.map(([title, copy], index) => (
-          <li key={title} className={index < state.processingIndex ? "done" : index === state.processingIndex ? "active" : ""}>
-            <span>{index < state.processingIndex ? "✓" : String(index + 1).padStart(2, "0")}</span>
-            <div><strong>{title}</strong><p>{copy}</p></div>
-          </li>
-        ))}
-      </ol>
-      <p className="trust-message">我们不会把生成内容伪装成典籍原文。</p>
-      <button className="skip-link" type="button" onClick={() => dispatch({ type: "finishProcessing" })}>跳过演示动效，直接查看结果</button>
+    <section className={`immersive-processing page-enter stage-${state.processingIndex + 1}`} aria-live="polite">
+      <div className="processing-intro">
+        <p className="eyebrow"><span /> 梦境解析 · 深入第 {state.processingIndex + 1} 层</p>
+        <h1>让梦境慢慢显影。</h1>
+        <p>画面只复现你已经确认的梦象；以下为预生成漫画演示，不代表正在调用实时生图模型。</p>
+      </div>
+
+      <div className="immersive-stage">
+        <figure className="comic-stage">
+          {/* 静态分镜在本地演示包内，避免解析过程依赖外部图片服务。 */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={hasSnake ? "/dream-comic-snake-well.png" : "/og.png"} alt={hasSnake ? "三格水墨漫画：梦中人走近古井，蛇从井边游来，梦中人在远处停下观察" : "水墨风格的梦境场景分镜"} />
+          <div className="comic-veil" aria-hidden="true" />
+          <div className="comic-scan" aria-hidden="true" />
+          <figcaption>
+            <span>梦境分镜 · 演示生成</span>
+            <strong>{hasSnake ? "旧宅 / 古井 / 蛇 / 陌生老人" : "根据已确认梦象匹配画面"}</strong>
+          </figcaption>
+          <div className="panel-depth" aria-hidden="true">
+            {["场景", "动作", "关系"].map((label, index) => <span className={index <= state.processingIndex ? "visible" : ""} key={label}>{label}</span>)}
+          </div>
+        </figure>
+
+        <aside className="analysis-console">
+          <div className="analysis-progress"><span>解析深度</span><b>{progress}%</b></div>
+          <div className="progress-track" aria-hidden="true"><i style={{ width: `${progress}%` }} /></div>
+          <div className="current-analysis" key={stage[0]}>
+            <small>0{state.processingIndex + 1} / 04</small>
+            <h2>{stage[0]}</h2>
+            <p>{stage[1]}</p>
+          </div>
+          <ol className="processing-list immersive-list">
+            {processingStages.map(([title], index) => <li key={title} className={index < state.processingIndex ? "done" : index === state.processingIndex ? "active" : ""}>
+              <span>{index < state.processingIndex ? "✓" : String(index + 1).padStart(2, "0")}</span><strong>{title.replace("正在", "")}</strong>
+            </li>)}
+          </ol>
+          <p className="trust-message">解释会在最后一次性生成；我们不会展示隐藏推理，也不会把生成内容伪装成典籍原文。</p>
+        </aside>
+      </div>
+
+      <button className="skip-link immersive-skip" type="button" onClick={() => dispatch({ type: "finishProcessing" })}>跳过沉浸过程，直接查看结果</button>
     </section>
   );
 }
@@ -608,7 +648,7 @@ export default function DreamApp() {
     const timer = window.setTimeout(() => {
       if (state.processingIndex >= processingStages.length - 1) dispatch({ type: "finishProcessing" });
       else dispatch({ type: "nextProcessing" });
-    }, 900);
+    }, 1700);
     return () => window.clearTimeout(timer);
   }, [state.processingIndex, state.session.step]);
 

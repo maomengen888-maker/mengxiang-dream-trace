@@ -497,6 +497,113 @@ footer p { margin: 0; }
 .dream-entry .recording-panel button { color: #93453b; }
 
 .result-page { width: min(1220px, calc(100% - 40px)); }
+
+/* 沉浸式解析：漫画从左到右分层显影，右侧同步显示当前解析阶段。 */
+.immersive-processing {
+  width: min(1260px, calc(100% - 40px));
+  min-height: calc(100vh - 124px);
+  margin: 0 auto;
+  padding: 52px 0 70px;
+  position: relative;
+  z-index: 1;
+}
+.processing-intro { display: grid; justify-items: center; text-align: center; }
+.processing-intro .eyebrow { justify-content: center; }
+.processing-intro h1 { margin: 18px 0 10px; font-size: clamp(40px, 5vw, 68px); }
+.processing-intro > p:last-child { max-width: 650px; margin: 0; color: #7f8e88; font-size: 11px; line-height: 1.7; }
+.immersive-stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(300px, .72fr);
+  min-height: 560px;
+  margin-top: 36px;
+  overflow: hidden;
+  border: 1px solid rgba(223,218,201,.16);
+  border-radius: 30px;
+  background: #091313;
+  box-shadow: 0 34px 100px rgba(0,0,0,.4);
+}
+.comic-stage { position: relative; min-width: 0; min-height: 560px; margin: 0; overflow: hidden; background: #050b0c; isolation: isolate; }
+.comic-stage::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgba(5,12,13,.12), transparent 34%, rgba(5,12,13,.14)), linear-gradient(0deg, rgba(5,12,13,.9), transparent 32%);
+}
+.comic-stage img {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  inset: 0;
+  object-fit: cover;
+  object-position: center;
+  opacity: .48;
+  filter: blur(11px) saturate(.48) brightness(.7);
+  transform: scale(1.07);
+  transition: opacity 1.35s ease, filter 1.35s ease, transform 1.35s ease;
+}
+.stage-2 .comic-stage img { opacity: .66; filter: blur(7px) saturate(.62) brightness(.78); transform: scale(1.045); }
+.stage-3 .comic-stage img { opacity: .84; filter: blur(3px) saturate(.78) brightness(.88); transform: scale(1.022); }
+.stage-4 .comic-stage img { opacity: 1; filter: blur(0) saturate(.92) brightness(.94); transform: scale(1); }
+.comic-veil {
+  width: 76%;
+  position: absolute;
+  inset: 0 0 0 auto;
+  z-index: 1;
+  background: linear-gradient(90deg, transparent, rgba(4,11,12,.94) 23%, #071112 100%);
+  transition: width 1.35s cubic-bezier(.22,.8,.24,1), opacity 1.35s ease;
+}
+.stage-2 .comic-veil { width: 54%; }
+.stage-3 .comic-veil { width: 30%; }
+.stage-4 .comic-veil { width: 7%; opacity: .28; }
+.comic-scan {
+  width: 1px;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 17%;
+  z-index: 3;
+  background: linear-gradient(180deg, transparent, rgba(219,153,121,.9), transparent);
+  box-shadow: 0 0 34px 9px rgba(188,82,60,.13);
+  animation: comic-scan 2.8s ease-in-out infinite;
+}
+@keyframes comic-scan {
+  0%, 100% { opacity: .18; transform: translateX(0); }
+  50% { opacity: .86; transform: translateX(min(55vw, 620px)); }
+}
+.comic-stage figcaption {
+  position: absolute;
+  left: 28px;
+  right: 28px;
+  bottom: 24px;
+  z-index: 4;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+}
+.comic-stage figcaption span { color: #d8947d; font-size: 9px; letter-spacing: .16em; }
+.comic-stage figcaption strong { max-width: 62%; color: #f1eadf; font-family: "Songti SC", STSong, serif; font-size: 15px; font-weight: 500; text-align: right; letter-spacing: .08em; }
+.panel-depth { display: flex; gap: 8px; position: absolute; top: 22px; left: 24px; z-index: 4; }
+.panel-depth span { padding: 6px 9px; border: 1px solid rgba(238,232,220,.18); color: rgba(238,232,220,.35); font-size: 8px; letter-spacing: .13em; background: rgba(4,12,13,.28); backdrop-filter: blur(8px); transition: color .7s ease, border-color .7s ease, background .7s ease; }
+.panel-depth span.visible { color: #efe8dd; border-color: rgba(211,105,84,.58); background: rgba(137,53,43,.3); }
+.analysis-console { min-width: 0; padding: 34px 32px 30px; background: linear-gradient(155deg, #122422, #091615 72%); }
+.analysis-progress { display: flex; align-items: center; justify-content: space-between; color: #7f918a; font-size: 9px; letter-spacing: .13em; }
+.analysis-progress b { color: #d98875; font-size: 10px; font-weight: 600; }
+.progress-track { height: 2px; margin-top: 12px; overflow: hidden; background: rgba(238,232,220,.1); }
+.progress-track i { display: block; height: 100%; background: linear-gradient(90deg, #81564b, #d06452); transition: width 1.25s cubic-bezier(.22,.8,.24,1); }
+.current-analysis { min-height: 154px; padding: 32px 0 24px; border-bottom: 1px solid var(--line); animation: analysis-in .75s ease both; }
+@keyframes analysis-in { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: translateY(0); } }
+.current-analysis small { color: #65766f; font-size: 9px; letter-spacing: .16em; }
+.current-analysis h2 { margin: 12px 0 9px; color: #f0e9dd; font-family: "Songti SC", STSong, serif; font-size: 25px; font-weight: 500; }
+.current-analysis p { margin: 0; color: #84938d; font-size: 11px; line-height: 1.75; }
+.immersive-list { margin: 19px 0 0; }
+.immersive-list li { grid-template-columns: 34px 1fr; gap: 12px; padding: 10px 0; border: 0; }
+.immersive-list li > span { width: 25px; height: 25px; font-size: 8px; }
+.immersive-list strong { align-self: center; font-family: Inter, "PingFang SC", sans-serif; font-size: 11px; letter-spacing: .08em; }
+.trust-message { margin: 21px 0 0; padding-top: 17px; border-top: 1px solid var(--line); color: #5f7069; font-size: 9px; line-height: 1.65; }
+.immersive-skip { display: block; margin: 24px auto 0; color: #89968f; }
 .result-hero { align-items: center; padding-bottom: 34px; }
 .result-title-row h1 { font-size: clamp(52px, 7vw, 88px); }
 .result-notice { margin: 18px 0 0; color: #9cb0a7; font-size: 11px; }
@@ -537,12 +644,29 @@ footer p { margin: 0; }
 .result-footer-line .secondary-button { flex: 0 0 auto; }
 
 @media (max-width: 900px) {
+  .immersive-processing { padding-top: 40px; }
+  .immersive-stage { grid-template-columns: 1fr; }
+  .comic-stage { min-height: 430px; }
+  .analysis-console { display: grid; grid-template-columns: 1fr 1fr; column-gap: 28px; }
+  .analysis-progress, .progress-track, .current-analysis { grid-column: 1; }
+  .immersive-list, .trust-message { grid-column: 2; }
+  .immersive-list { grid-row: 1 / span 3; margin-top: 0; }
   .result-feature-grid { grid-template-columns: 1fr; }
   .reading-panel { min-height: auto; }
   .result-card { max-width: 620px; width: 100%; margin: 0 auto; }
 }
 
 @media (max-width: 700px) {
+  .immersive-processing { width: min(100% - 28px, 1260px); padding: 36px 0 54px; }
+  .processing-intro h1 { font-size: 40px; }
+  .immersive-stage { min-height: 0; margin-top: 28px; border-radius: 22px; }
+  .comic-stage { min-height: 330px; }
+  .comic-stage figcaption { left: 18px; right: 18px; bottom: 18px; align-items: flex-start; flex-direction: column; gap: 7px; }
+  .comic-stage figcaption strong { max-width: 100%; text-align: left; font-size: 13px; }
+  .panel-depth { top: 16px; left: 16px; }
+  .analysis-console { display: block; padding: 26px 22px 24px; }
+  .current-analysis { min-height: 138px; }
+  .immersive-list { margin-top: 16px; }
   .dream-entry { border-radius: 24px; }
   .voice-priority { grid-template-columns: 1fr; padding: 20px; }
   .permission-note { margin-top: 4px; }

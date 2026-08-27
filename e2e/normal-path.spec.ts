@@ -19,7 +19,15 @@ test("正常演示路径从输入走到卡片并可返回纠正", async ({ page 
   await page.getByRole("button", { name: /看起来准确/ }).click();
 
   await page.getByRole("button", { name: /^没有/ }).click();
-  await page.getByRole("button", { name: /跳过演示动效/ }).click();
+  const dreamComic = page.getByAltText(/三格水墨漫画/);
+  await expect(dreamComic).toBeVisible();
+  await expect(dreamComic).toHaveAttribute("alt", /三格水墨漫画/);
+  await expect(page.getByRole("heading", { name: "正在重现梦境" })).toBeVisible();
+  await expect(page.getByText("梦境分镜 · 演示生成")).toBeVisible();
+  await expect(page.locator(".immersive-processing")).toHaveClass(/stage-2/, { timeout: 2_600 });
+  const hasHorizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
+  expect(hasHorizontalOverflow).toBe(false);
+  await page.getByRole("button", { name: /跳过沉浸过程/ }).click();
 
   await expect(page.getByRole("heading", { name: "井畔之蛇", level: 1 })).toBeVisible();
   await expect(page.getByLabel("梦象结果卡片")).toContainText("旧宅是过去，古井是深处，蛇是警觉");
@@ -29,7 +37,8 @@ test("正常演示路径从输入走到卡片并可返回纠正", async ({ page 
   await page.getByRole("button", { name: /敦煌写本 P.3908/ }).click();
   await expect(page.getByText("尚未记录叶面与栏位")).toBeVisible();
 
-  await page.getByRole("button", { name: /纠正梦象/ }).first().click();
+  await page.getByRole("button", { name: "返回梦象确认" }).click();
+  await expect(page.getByRole("heading", { name: "这是我们理解到的梦象" })).toBeVisible();
   await expect(page.getByText("修订 R2")).toBeVisible();
-  await expect(page.getByText(/旧解释与旧卡片已失效/)).toBeVisible();
+  await expect(page.getByText(/已返回梦象确认/)).toBeVisible();
 });
