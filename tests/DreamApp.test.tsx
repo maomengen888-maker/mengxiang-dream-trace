@@ -7,15 +7,16 @@ describe("正常路径前半段", () => {
 
   it("空输入不跳页并显示就地提示", () => {
     render(<DreamApp />);
-    fireEvent.click(screen.getByRole("button", { name: /记下这个梦/ }));
+    expect(screen.getByRole("button", { name: /^语音记录/ })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: /确认梦境/ }));
     expect(screen.getByText("先写下一点梦里的内容，再继续。")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /记录昨夜的梦/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /把昨夜的梦/ })).toBeInTheDocument();
   });
 
   it("示例转写先出现古镜，纠正后梦象只包含古井", () => {
     render(<DreamApp />);
     fireEvent.click(screen.getByRole("button", { name: "填入示例梦境" }));
-    fireEvent.click(screen.getByRole("button", { name: /记下这个梦/ }));
+    fireEvent.click(screen.getByRole("button", { name: /确认梦境/ }));
 
     const transcript = screen.getByLabelText("完整转写内容");
     expect((transcript as HTMLTextAreaElement).value).toContain("古镜");
@@ -33,6 +34,6 @@ describe("正常路径前半段", () => {
 
     await waitFor(() => expect(screen.getByText("上次会话数据无法恢复，已为你安全地重新开始。")).toBeInTheDocument());
     expect(sessionStorage.getItem("mengxiang:poc:session:v1")).not.toBe("{not-json");
-    expect(screen.getByRole("heading", { name: /记录昨夜的梦/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /把昨夜的梦/ })).toBeInTheDocument();
   });
 });

@@ -73,6 +73,9 @@ export const InterpretationSchema = z.object({
   title: z.string().min(1),
   dreamSummary: z.string().min(1),
   coreStatement: z.string().min(1),
+  detailedReading: z.string().min(1),
+  oneLineSummary: z.string().min(1),
+  focusPoints: z.array(z.string().min(1)).min(1),
   certaintyLevel: z.enum(["clear", "reserved", "associative"]),
   knowledgeBaseVersion: z.string().min(1),
   workflowVersion: z.string().min(1),
@@ -88,6 +91,9 @@ export const CardSpecSchema = z.object({
   interpretationId: z.string().min(1),
   title: z.string().min(1),
   coreStatement: z.string().min(1),
+  detailedReading: z.string().min(1),
+  oneLineSummary: z.string().min(1),
+  focusPoints: z.array(z.string().min(1)).min(1),
   visualElements: z.array(z.string()),
   style: z.literal("幽暗水墨"),
   excludedContent: z.array(z.string()),
@@ -227,8 +233,24 @@ export function createInterpretation(
     dreamSummary: structure.confirmedText,
     coreStatement:
       clarificationAnswer === "有"
-        ? "梦里的靠近伴随明确威胁，传统意象只能提供警醒式联想，不代表现实事件将会发生。"
-        : "恐惧与好奇同时出现，像是在邀请你重新看清一件尚未靠近的事。",
+        ? "梦里的靠近伴随明确威胁，重点是重新确认边界，而不是预言现实会发生坏事。"
+        : "别被井边的蛇吓到：它没有攻击，你仍愿意靠近，梦的重点更像是如何面对未知。",
+    detailedReading:
+      clarificationAnswer === "有"
+        ? "蛇的主动靠近让这个梦带有更强的边界提醒。旧宅像熟悉却积压已久的生活背景，古井指向被保存的情绪或记忆，陌生老人则像一个让你放慢观察的角色。梦不能预测现实，但它可能在提醒你：最近若有一件事让你感到被逼近，不必马上对抗，也不要忽略不适；先拉开安全距离、说清界限，再决定是否继续。"
+        : clarificationAnswer === "记不清" || !clarificationAnswer
+          ? "你记得蛇、古井和靠近，却不确定蛇是否具有攻击性，因此不适合把它说成明确的吉凶。旧宅像熟悉的过去，古井像尚未说清的深层感受，蛇则保留着警觉与变化的双重意味。先把最近让你既担心又好奇的事情写下来，确认事实，再判断是否值得靠近。"
+          : "蛇没有主动攻击，你却在害怕中仍愿意靠近，这让梦的重点从“危险”转向“如何面对未知”。旧宅像熟悉却沉积已久的生活背景，古井指向被保存的情绪或记忆，陌生老人更像一个提醒你放慢、观察的角色。真正值得留意的，不是它预示坏事，而是你最近是否正在接近一件既担心又好奇的事。蛇盘在井边而未攻击，说明紧张仍处在可观察、可设边界的阶段；先确认边界，再靠近答案。",
+    oneLineSummary:
+      clarificationAnswer === "有"
+        ? "一句话总结：旧宅是积压，古井是深处，蛇的靠近是边界提醒；先退到安全处，再决定下一步。"
+        : clarificationAnswer === "记不清" || !clarificationAnswer
+          ? "一句话总结：梦意仍有空白；先分清事实与担心，再决定要不要靠近。"
+          : "一句话总结：旧宅是过去，古井是深处，蛇是警觉；带着边界感靠近，答案会比恐惧更清楚。",
+    focusPoints:
+      clarificationAnswer === "有"
+        ? ["最近是否有人或事情越过你的边界", "先恢复安全距离", "把拒绝或需求说清楚"]
+        : ["最近那件既担心又想靠近的事", "先确认自己的边界与安全感", "把好奇变成一次小而可控的行动"],
     certaintyLevel: clarificationAnswer === "记不清" || !clarificationAnswer ? "associative" : "reserved",
     knowledgeBaseVersion: "p3908-bnf-poc-v1",
     workflowVersion: "fixture-workflow-v1",
@@ -255,6 +277,9 @@ export function createCardSpec(
     interpretationId: interpretation.interpretationId,
     title: interpretation.title,
     coreStatement: interpretation.coreStatement,
+    detailedReading: interpretation.detailedReading,
+    oneLineSummary: interpretation.oneLineSummary,
+    focusPoints: interpretation.focusPoints,
     visualElements,
     style: "幽暗水墨",
     excludedContent: ["真实姓名", "联系方式", "精确位置", "完整梦境文本"],

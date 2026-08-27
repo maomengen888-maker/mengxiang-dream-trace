@@ -36,7 +36,6 @@ const progressOrder: PageState[] = [
   "clarifying",
   "processing",
   "result",
-  "card",
 ];
 
 const processingStages = [
@@ -60,14 +59,15 @@ const initialSession = (): AppSession => ({
 });
 
 type RecordingState = "idle" | "recording" | "paused";
+type InputMode = "voice" | "text";
 
 interface UiState {
   session: AppSession;
+  inputMode: InputMode;
   recordingState: RecordingState;
   recordingSeconds: number;
   processingIndex: number;
   sourceOpen: boolean;
-  fallbackCard: boolean;
   notice: string;
 }
 
@@ -76,6 +76,7 @@ type SymbolField = "scene" | "characters" | "objects" | "actions" | "emotions" |
 type Action =
   | { type: "hydrate"; session: AppSession }
   | { type: "hydrateError" }
+  | { type: "setInputMode"; mode: InputMode }
   | { type: "setDraft"; value: string }
   | { type: "fillSample" }
   | { type: "submitDraft" }
@@ -93,8 +94,6 @@ type Action =
   | { type: "nextProcessing" }
   | { type: "finishProcessing" }
   | { type: "toggleSource" }
-  | { type: "createCard" }
-  | { type: "toggleFallback" }
   | { type: "cardAction"; message: string }
   | { type: "reviseResult" }
   | { type: "goBack" }
@@ -109,9 +108,11 @@ function reducer(state: UiState, action: Action): UiState {
 
   switch (action.type) {
     case "hydrate":
-      return { ...state, session: action.session };
+      return { ...state, session: { ...action.session, step: action.session.step === "card" ? "result" : action.session.step } };
     case "hydrateError":
       return { ...state, notice: "上次会话数据无法恢复，已为你安全地重新开始。" };
+    case "setInputMode":
+      return { ...state, inputMode: action.mode, notice: "" };
     case "setDraft":
       return withSession(state, { ...session, draftText: action.value }, "");
     case "fillSample":
@@ -187,21 +188,20 @@ function reducer(state: UiState, action: Action): UiState {
       return { ...state, processingIndex: Math.min(state.processingIndex + 1, processingStages.length - 1) };
     case "finishProcessing": {
       if (!session.structure) return state;
+      if (session.interpretation?.inputRevision === session.inputRevision && session.card?.inputRevision === session.inputRevision) return state;
       const interpretation = createInterpretation(session.structure, session.clarificationAnswer);
+      const card = createCardSpec(session.structure, interpretation);
       return {
-        ...withSession(state, { ...session, interpretation, card: null, step: "result" }),
+        ...withSession(
+          state,
+          { ...session, interpretation, card, step: "result" },
+          "结果卡片已根据本次确认内容生成；纠正梦象后才会生成新的修订版。",
+        ),
         processingIndex: 0,
       };
     }
     case "toggleSource":
       return { ...state, sourceOpen: !state.sourceOpen };
-    case "createCard": {
-      if (!session.structure || !session.interpretation) return state;
-      const card = createCardSpec(session.structure, session.interpretation);
-      return { ...withSession(state, { ...session, card, step: "card" }), fallbackCard: false };
-    }
-    case "toggleFallback":
-      return { ...state, fallbackCard: !state.fallbackCard, notice: !state.fallbackCard ? "已切换到图片失败降级卡片。" : "已恢复水墨画面。" };
     case "cardAction":
       return { ...state, notice: action.message };
     case "reviseResult": {
@@ -214,7 +214,6 @@ function reducer(state: UiState, action: Action): UiState {
         symbol_review: "transcript_review",
         clarifying: "symbol_review",
         processing: "symbol_review",
-        card: "result",
       };
       const previous = backMap[session.step];
       return previous ? withSession(state, { ...session, step: previous }, "") : state;
@@ -222,11 +221,11 @@ function reducer(state: UiState, action: Action): UiState {
     case "clear":
       return {
         session: initialSession(),
+        inputMode: "voice",
         recordingState: "idle",
         recordingSeconds: 0,
         processingIndex: 0,
         sourceOpen: false,
-        fallbackCard: false,
         notice: "本次梦境已清除。",
       };
   }
@@ -282,50 +281,56 @@ function DraftPage({ state, dispatch }: { state: UiState; dispatch: React.Dispat
 
   return (
     <section className="hero page-enter" aria-labelledby="draft-title">
-      <p className="eyebrow"><span /> 昨夜 · 一场未解的梦</p>
-      <h1 id="draft-title">记录昨夜的梦，<br />从传统梦象中寻找它的来处。</h1>
-      <p className="hero-copy">我们会先请你确认梦境，再呈现出处与不确定性。传统文化解释不等于现实预言。</p>
+      <p className="eyebrow"><span /> 梦境记录 · 从说出来开始</p>
+      <h1 id="draft-title">把昨夜的梦，<br />交给清醒后的自己。</h1>
+      <p className="hero-copy">先完整说出或写下，再逐步确认。我们会把梦象、解释与来源边界清楚地放在一起。</p>
 
       <div className="dream-entry" aria-labelledby="entry-title">
         <div className="entry-heading">
-          <div><p className="step-kicker">第一步</p><h2 id="entry-title">你还记得什么？</h2></div>
-          <span className="demo-badge">演示原型</span>
-        </div>
-        <label className="sr-only" htmlFor="dream-text">写下梦境</label>
-        <textarea
-          id="dream-text"
-          value={state.session.draftText}
-          maxLength={1000}
-          onChange={(event) => dispatch({ type: "setDraft", value: event.target.value })}
-          placeholder="比如：我站在一座旧宅里，井边盘着一条蛇……"
-        />
-        <div className="entry-meta">
-          <span>{state.session.draftText.length} / 1000</span>
-          <button type="button" className="sample-link" onClick={() => dispatch({ type: "fillSample" })}>填入示例梦境</button>
+          <div><p className="step-kicker">01 · 选择记录方式</p><h2 id="entry-title">你还记得什么？</h2></div>
+          <span className="demo-badge">隐私优先</span>
         </div>
 
-        {recording !== "idle" ? (
-          <div className="recording-panel" role="status">
-            <span className={recording === "recording" ? "pulse-dot" : "pause-dot"} aria-hidden="true" />
-            <strong>{recording === "recording" ? "正在记录" : "录音已暂停"}</strong>
-            <time>{formatDuration(state.recordingSeconds)}</time>
-            <button type="button" onClick={() => dispatch({ type: recording === "recording" ? "pauseRecording" : "resumeRecording" })}>
-              {recording === "recording" ? "暂停" : "继续"}
-            </button>
-            <button type="button" onClick={() => dispatch({ type: "endRecording" })}>结束并转写</button>
-          </div>
-        ) : null}
+        <div className="input-mode-switch" role="group" aria-label="梦境输入方式">
+          <button type="button" aria-pressed={state.inputMode === "voice"} className={state.inputMode === "voice" ? "active" : ""} onClick={() => dispatch({ type: "setInputMode", mode: "voice" })}>
+            <span>语音记录</span><small>默认推荐</small>
+          </button>
+          <button type="button" aria-pressed={state.inputMode === "text"} className={state.inputMode === "text" ? "active" : ""} onClick={() => dispatch({ type: "setInputMode", mode: "text" })}>
+            <span>文字输入</span><small>随时可写</small>
+          </button>
+        </div>
+
+        <div className={`voice-priority ${state.inputMode === "voice" ? "selected" : ""}`}>
+          <button className="voice-orb" type="button" onClick={() => dispatch({ type: "startRecording" })} disabled={recording !== "idle"} aria-label="开始语音记录">
+            <span className="voice-rings" aria-hidden="true"><i /></span>
+            <strong>{recording === "idle" ? "开始讲述" : "记录中"}</strong>
+            <small>点击开始模拟录音</small>
+          </button>
+          <div className="permission-note"><span aria-hidden="true">◉</span><p><strong>麦克风权限说明</strong>正式接入时仅在点击后请求；当前演示不会调用或上传真实录音。</p></div>
+        </div>
+
+        {recording !== "idle" ? <div className="recording-panel" role="status">
+          <span className={recording === "recording" ? "pulse-dot" : "pause-dot"} aria-hidden="true" />
+          <strong>{recording === "recording" ? "正在记录" : "录音已暂停"}</strong>
+          <time>{formatDuration(state.recordingSeconds)}</time>
+          <button type="button" onClick={() => dispatch({ type: recording === "recording" ? "pauseRecording" : "resumeRecording" })}>{recording === "recording" ? "暂停" : "继续"}</button>
+          <button type="button" onClick={() => dispatch({ type: "endRecording" })}>结束并转写</button>
+        </div> : null}
+
+        <div className={`text-compose ${state.inputMode === "text" ? "selected" : ""}`}>
+          <div className="text-compose-heading"><span>{state.inputMode === "voice" ? "也可以直接输入文字" : "文字输入已选中"}</span><button type="button" className="sample-link" onClick={() => dispatch({ type: "fillSample" })}>填入示例梦境</button></div>
+          <label className="sr-only" htmlFor="dream-text">写下梦境</label>
+          <textarea id="dream-text" value={state.session.draftText} maxLength={1000} onFocus={() => dispatch({ type: "setInputMode", mode: "text" })} onChange={(event) => dispatch({ type: "setDraft", value: event.target.value })} placeholder="比如：我站在一座旧宅里，井边盘着一条蛇……" />
+          <div className="entry-meta"><span>{state.session.draftText.length} / 1000</span><span>内容仅保存在本次会话</span></div>
+        </div>
 
         {state.notice ? <p className="entry-message" role="status">{state.notice}</p> : null}
         <div className="entry-actions">
-          <button className="record-button" type="button" onClick={() => dispatch({ type: "startRecording" })} disabled={recording !== "idle"}>
-            <span className="record-dot" aria-hidden="true" />语音记录<small>模拟</small>
-          </button>
           <button className="primary-button" type="button" onClick={() => {
             dispatch({ type: "submitDraft" });
-            if (state.session.draftText.trim()) track("dream_input_started", { input_mode: "text" });
+            if (state.session.draftText.trim()) track("dream_input_started", { input_mode: state.inputMode });
           }}>
-            记下这个梦 <span aria-hidden="true">→</span>
+            确认梦境，继续解析 <span aria-hidden="true">→</span>
           </button>
         </div>
       </div>
@@ -474,122 +479,91 @@ function ProcessingPage({ state, dispatch }: { state: UiState; dispatch: React.D
 function ResultPage({ state, dispatch }: { state: UiState; dispatch: React.Dispatch<Action> }) {
   const structure = state.session.structure;
   const result = state.session.interpretation;
-  if (!structure || !result) return null;
+  const card = state.session.card;
+  if (!structure || !result || !card) return null;
   const candidates = candidateEntriesFor(structure);
   const certainty = result.certaintyLevel === "reserved" ? "有保留" : result.certaintyLevel === "associative" ? "仅供联想" : "较明确";
+  const date = new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long", day: "numeric" }).format(new Date());
 
   return (
     <section className="result-page page-enter">
       <div className="result-hero">
         <div>
-          <p className="eyebrow"><span /> 解梦结果 · 修订 R{result.inputRevision}</p>
+          <p className="eyebrow"><span /> 已完成 · 修订 R{result.inputRevision}</p>
           <div className="result-title-row"><h1>{result.title}</h1><span className="certainty-badge">{certainty}</span></div>
-          <p className="dream-summary">{result.dreamSummary}</p>
+          <p className="dream-summary">你的解释与结果卡片已经同时生成。卡片基于本次确认内容，只生成一次。</p>
         </div>
         <div className="result-actions-top">
           <button type="button" className="secondary-button" onClick={() => dispatch({ type: "reviseResult" })}>纠正梦象</button>
-          <button type="button" className="primary-button" onClick={() => {
-            dispatch({ type: "createCard" });
-            track("card_generated", { style: "ink", used_fallback: false });
-          }}>生成视觉卡片 <span aria-hidden="true">→</span></button>
         </div>
       </div>
 
-      <div className="result-layout">
-        <div className="result-main">
-          <article className="core-statement">
-            <span>综合解释 · 非典籍原文</span>
-            <blockquote>“{result.coreStatement}”</blockquote>
-          </article>
+      {state.notice ? <p className="result-notice" role="status">✓ {state.notice}</p> : null}
 
-          <section className="result-section">
-            <div className="section-heading"><p>梦象拆解</p><span>基于已确认内容</span></div>
-            <div className="explanation-grid">
-              <article><div><span className="evidence-tag pending">待核验来源</span><h2>蛇与古井</h2></div><p>主体与场景已确认，但 P.3908 中对应原文尚未完成叶面与栏位核验，本阶段不会展示成“直接记载”。</p></article>
-              <article><div><span className="evidence-tag synthesis">综合解释</span><h2>主动靠近</h2></div><p>你在害怕的同时仍然靠近，这是一条来自确认梦境的上下文线索，不属于古籍原文。</p></article>
-            </div>
-          </section>
-
-          <section className="source-section">
-            <button type="button" className="source-toggle" onClick={() => {
-              dispatch({ type: "toggleSource" });
-              track("source_opened", { entry_id: candidates[0]?.entryId ?? "none", verification_status: "pending" });
-            }} aria-expanded={state.sourceOpen}>
-              <span><small>主版本来源</small><strong>敦煌写本 P.3908《新集周公解梦书》</strong></span>
-              <i>{state.sourceOpen ? "收起" : "展开"} <b aria-hidden="true">{state.sourceOpen ? "−" : "+"}</b></i>
-            </button>
-            {state.sourceOpen ? (
-              <div className="source-detail">
-                <dl>
-                  <div><dt>馆藏号</dt><dd>{P3908_SOURCE.shelfmark}</dd></div>
-                  <div><dt>馆藏机构</dt><dd>{P3908_SOURCE.holdingInstitution}</dd></div>
-                  <div><dt>条目状态</dt><dd><span className="pending-text">待逐页核验</span></dd></div>
-                  <div><dt>具体位置</dt><dd>尚未记录叶面与栏位</dd></div>
-                </dl>
-                <div className="source-boundary">
-                  <strong>为什么没有展示原文？</strong>
-                  <p>选定主版本不等于具体条目已经核验。只有完成数字影像对照、位置记录和人工复核后，才能标记“直接记载”。</p>
-                </div>
-                <div className="source-links">
-                  <a href={P3908_SOURCE.catalogUrl} target="_blank" rel="noreferrer">BnF 馆藏记录 ↗</a>
-                  <a href={P3908_SOURCE.digitizationUrl} target="_blank" rel="noreferrer">Gallica 数字影像 ↗</a>
-                </div>
-              </div>
-            ) : null}
-          </section>
-        </div>
-
-        <aside className="result-aside">
-          <div className="aside-card"><span>本次确定性</span><strong>{certainty}</strong><p>{result.uncertaintyNotes.join(" ")}</p></div>
-          <div className="aside-card"><span>使用的梦象</span><div className="mini-tags">{[...structure.objects, ...structure.emotions].map((item) => <i key={item}>{item}</i>)}</div></div>
-          <div className="safety-card"><strong>文化娱乐提示</strong><p>{result.safetyNotice}</p></div>
-        </aside>
-      </div>
-
-      <div className="result-bottom-action">
-        <button type="button" className="secondary-button" onClick={() => dispatch({ type: "reviseResult" })}>纠正梦象</button>
-        <button className="primary-button" type="button" onClick={() => dispatch({ type: "createCard" })}>把这个梦做成卡片 <span aria-hidden="true">→</span></button>
-      </div>
-    </section>
-  );
-}
-
-function CardPage({ state, dispatch }: { state: UiState; dispatch: React.Dispatch<Action> }) {
-  const card = state.session.card;
-  if (!card) return null;
-  const date = new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long", day: "numeric" }).format(new Date());
-
-  return (
-    <section className="card-page page-enter">
-      <FlowHeading kicker="视觉卡片 · 07" title="让梦停在一幅画里" copy="卡片只使用最终确认的摘要和脱敏视觉元素；画面不会反过来改变解梦结论。" />
-      <div className="card-workspace">
-        <article className={`dream-card ${state.fallbackCard ? "fallback" : ""}`} aria-label="梦象视觉卡片预览">
-          <div className="card-noise" aria-hidden="true" />
-          <div className="card-brand"><span>梦</span><strong>梦象</strong></div>
-          <div className="card-copy"><p>{date}</p><h2>{card.title}</h2><blockquote>{card.coreStatement}</blockquote></div>
-          <div className="card-elements">{card.visualElements.map((element) => <span key={element}>{element}</span>)}</div>
-          <small>传统文化资料 · 仅供文化娱乐与个人记录</small>
+      <div className="result-feature-grid">
+        <article className="reading-panel">
+          <div className="reading-label"><span>梦境解释</span><small>综合说明 · 非典籍原文</small></div>
+          <h2>{result.coreStatement}</h2>
+          <p>{result.detailedReading}</p>
+          <blockquote>{result.oneLineSummary}</blockquote>
+          <div className="focus-list">
+            <span>你可以留意</span>
+            <ol>{result.focusPoints.map((point, index) => <li key={point}><i>{String(index + 1).padStart(2, "0")}</i>{point}</li>)}</ol>
+          </div>
         </article>
 
-        <aside className="card-controls">
-          <div><span>卡片使用了这些已确认元素</span><div className="mini-tags">{card.visualElements.map((element) => <i key={element}>{element}</i>)}</div></div>
-          <div className="privacy-box"><strong>已自动排除</strong><p>{card.excludedContent.join("、")}</p></div>
-          <button className="secondary-button full-button" type="button" onClick={() => dispatch({ type: "cardAction", message: "已重新组织画面；解释内容保持不变。" })}>重新生成画面</button>
-          <button className="secondary-button full-button" type="button" onClick={() => dispatch({ type: "toggleFallback" })}>{state.fallbackCard ? "恢复水墨画面" : "模拟图片生成失败"}</button>
-          <div className="card-action-row">
+        <article className="result-card" aria-label="梦象结果卡片">
+          <div className="result-card-art" aria-hidden="true"><span>梦象</span></div>
+          <div className="result-card-body">
+            <div className="result-card-meta"><span>{date}</span><b>自动生成 · 仅一次</b></div>
+            <h2>{card.title}</h2>
+            <p>{card.detailedReading}</p>
+            <blockquote>{card.oneLineSummary}</blockquote>
+            <div className="card-elements">{card.visualElements.map((element) => <span key={element}>{element}</span>)}</div>
+            <small>P.3908 主版本已确认 · 具体条目待核验 · 仅供文化娱乐与个人记录</small>
+          </div>
+          <div className="result-card-actions">
             <button type="button" onClick={() => {
               dispatch({ type: "cardAction", message: "保存演示完成：PoC 未写入你的照片库。" });
               track("card_action_clicked", { action_type: "save" });
-            }}>保存</button>
+            }}>保存卡片</button>
             <button type="button" onClick={() => {
-              dispatch({ type: "cardAction", message: "分享面板为演示状态，未向外部发送内容。" });
+              dispatch({ type: "cardAction", message: "摘要已准备好；演示环境不会向外部发送内容。" });
               track("card_action_clicked", { action_type: "share" });
-            }}>分享</button>
+            }}>复制摘要</button>
           </div>
-          {state.notice ? <p className="entry-message" role="status">{state.notice}</p> : null}
-          <button className="text-button" type="button" onClick={() => dispatch({ type: "goBack" })}>← 返回解梦结果</button>
-        </aside>
+        </article>
       </div>
+
+      <section className="result-section">
+        <div className="section-heading"><p>这份解释从哪里来</p><span>梦境事实与来源分开呈现</span></div>
+        <div className="explanation-grid">
+          <article><div><span className="evidence-tag pending">待核验来源</span><h2>蛇与古井</h2></div><p>主体与场景已确认，但 P.3908 中对应原文尚未完成叶面与栏位核验，不会展示成“直接记载”。</p></article>
+          <article><div><span className="evidence-tag synthesis">来自你的梦</span><h2>害怕但仍靠近</h2></div><p>这是你确认过的情绪与行为，用于组织解释；它不属于古籍原文，也不构成现实预测。</p></article>
+        </div>
+      </section>
+
+      <section className="source-section">
+        <button type="button" className="source-toggle" onClick={() => {
+          dispatch({ type: "toggleSource" });
+          track("source_opened", { entry_id: candidates[0]?.entryId ?? "none", verification_status: "pending" });
+        }} aria-expanded={state.sourceOpen}>
+          <span><small>主版本来源</small><strong>敦煌写本 P.3908《新集周公解梦书》</strong></span>
+          <i>{state.sourceOpen ? "收起" : "查看来源边界"} <b aria-hidden="true">{state.sourceOpen ? "−" : "+"}</b></i>
+        </button>
+        {state.sourceOpen ? <div className="source-detail">
+          <dl>
+            <div><dt>馆藏号</dt><dd>{P3908_SOURCE.shelfmark}</dd></div>
+            <div><dt>馆藏机构</dt><dd>{P3908_SOURCE.holdingInstitution}</dd></div>
+            <div><dt>条目状态</dt><dd><span className="pending-text">待逐页核验</span></dd></div>
+            <div><dt>具体位置</dt><dd>尚未记录叶面与栏位</dd></div>
+          </dl>
+          <div className="source-boundary"><strong>为什么没有展示原文？</strong><p>选定主版本不等于具体条目已经核验。只有完成数字影像对照、位置记录和人工复核后，才能标记“直接记载”。</p></div>
+          <div className="source-links"><a href={P3908_SOURCE.catalogUrl} target="_blank" rel="noreferrer">BnF 馆藏记录 ↗</a><a href={P3908_SOURCE.digitizationUrl} target="_blank" rel="noreferrer">Gallica 数字影像 ↗</a></div>
+        </div> : null}
+      </section>
+
+      <div className="result-footer-line"><p>{result.safetyNotice}</p><button type="button" className="secondary-button" onClick={() => dispatch({ type: "reviseResult" })}>纠正梦象，生成新修订</button></div>
     </section>
   );
 }
@@ -597,11 +571,11 @@ function CardPage({ state, dispatch }: { state: UiState; dispatch: React.Dispatc
 export default function DreamApp() {
   const [state, dispatch] = useReducer(reducer, {
     session: initialSession(),
+    inputMode: "voice",
     recordingState: "idle",
     recordingSeconds: 0,
     processingIndex: 0,
     sourceOpen: false,
-    fallbackCard: false,
     notice: "",
   });
   const hydrated = useRef(false);
@@ -646,7 +620,7 @@ export default function DreamApp() {
       case "clarifying": return <ClarifyingPage dispatch={dispatch} />;
       case "processing": return <ProcessingPage state={state} dispatch={dispatch} />;
       case "result": return <ResultPage state={state} dispatch={dispatch} />;
-      case "card": return <CardPage state={state} dispatch={dispatch} />;
+      case "card": return <ResultPage state={state} dispatch={dispatch} />;
     }
   })();
 
