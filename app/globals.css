@@ -814,6 +814,10 @@ footer p { margin: 0; }
 }
 .home-shell .ambient-one { background: #d5e1eb; opacity: .34; }
 .home-shell .ambient-two { background: #a44338; opacity: .06; }
+.home-shell .ambient-one { animation: ambient-cloud-one 15s ease-in-out infinite alternate; }
+.home-shell .ambient-two { animation: ambient-cloud-two 18s ease-in-out infinite alternate; }
+@keyframes ambient-cloud-one { to { transform: translate(-48px, 54px) scale(1.12); opacity: .22; } }
+@keyframes ambient-cloud-two { to { transform: translate(70px, -42px) scale(.88); opacity: .1; } }
 .marketing-header { position: relative; z-index: 5; padding: 24px 28px 0; }
 .marketing-header-inner {
   width: min(1120px, 100%);
@@ -850,8 +854,26 @@ footer p { margin: 0; }
 .dream-home .home-atmosphere { inset: -90px 0 auto; height: 610px; overflow: hidden; opacity: 1; }
 .dream-home .moon-mark { width: 190px; height: 190px; top: 18px; right: 4%; opacity: .12; border-color: #5d7690; box-shadow: inset -24px -14px 0 rgba(255,255,255,.55); }
 .mist-ring { position: absolute; border: 1px solid rgba(69,96,119,.08); border-radius: 50%; filter: blur(.2px); }
-.mist-ring-one { width: 520px; height: 120px; left: -150px; top: 250px; transform: rotate(-9deg); }
-.mist-ring-two { width: 680px; height: 150px; right: -260px; top: 330px; transform: rotate(8deg); }
+.mist-ring-one { width: 520px; height: 120px; left: -150px; top: 250px; transform: rotate(-9deg); animation: mist-drift-one 17s ease-in-out infinite alternate; }
+.mist-ring-two { width: 680px; height: 150px; right: -260px; top: 330px; transform: rotate(8deg); animation: mist-drift-two 21s ease-in-out infinite alternate; }
+.dream-floaters { position: absolute; inset: 0; }
+.dream-floaters i { width: 8px; height: 8px; position: absolute; border-radius: 50%; background: radial-gradient(circle, rgba(74,101,119,.32), rgba(74,101,119,0)); filter: blur(.2px); animation: dream-float 12s ease-in-out infinite; }
+.dream-floaters i:nth-child(1) { left: 8%; top: 18%; animation-delay: -2s; }
+.dream-floaters i:nth-child(2) { left: 18%; top: 54%; width: 5px; height: 5px; animation-delay: -7s; }
+.dream-floaters i:nth-child(3) { left: 31%; top: 29%; width: 11px; height: 11px; animation-delay: -4s; }
+.dream-floaters i:nth-child(4) { left: 46%; top: 68%; width: 6px; height: 6px; animation-delay: -9s; }
+.dream-floaters i:nth-child(5) { left: 58%; top: 20%; animation-delay: -5s; }
+.dream-floaters i:nth-child(6) { left: 69%; top: 52%; width: 12px; height: 12px; animation-delay: -1s; }
+.dream-floaters i:nth-child(7) { left: 81%; top: 33%; width: 5px; height: 5px; animation-delay: -8s; }
+.dream-floaters i:nth-child(8) { left: 91%; top: 70%; animation-delay: -3s; }
+.dream-floaters i:nth-child(9) { left: 39%; top: 9%; width: 4px; height: 4px; animation-delay: -10s; }
+@keyframes mist-drift-one { to { transform: translate(150px, -20px) rotate(-3deg) scale(1.08); opacity: .3; } }
+@keyframes mist-drift-two { to { transform: translate(-170px, 28px) rotate(2deg) scale(.94); opacity: .52; } }
+@keyframes dream-float {
+  0%, 100% { opacity: .08; transform: translate3d(0, 18px, 0) scale(.75); }
+  35% { opacity: .46; transform: translate3d(16px, -10px, 0) scale(1); }
+  70% { opacity: .2; transform: translate3d(-10px, -32px, 0) scale(.88); }
+}
 .dream-home > .eyebrow { justify-content: center; color: #7d8790; font-size: 10px; letter-spacing: .2em; }
 .dream-home > .eyebrow span { width: 40px; background: rgba(164,67,56,.48); }
 .dream-home .home-title-line { display: block; }

@@ -2,8 +2,29 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 import DreamApp from "../app/DreamApp";
 
+class MockSpeechRecognition {
+  lang = "";
+  continuous = false;
+  interimResults = false;
+  onstart: (() => void) | null = null;
+  onresult: ((event: { results: ArrayLike<{ isFinal: boolean; 0: { transcript: string } }> }) => void) | null = null;
+  onerror: ((event: { error: string }) => void) | null = null;
+  onend: (() => void) | null = null;
+
+  start() {
+    this.onstart?.();
+    this.onresult?.({ results: [{ isFinal: true, 0: { transcript: "我梦见一条蛇盘在古井边" } }] });
+  }
+
+  stop() { this.onend?.(); }
+  abort() {}
+}
+
 describe("正常路径前半段", () => {
-  beforeEach(() => sessionStorage.clear());
+  beforeEach(() => {
+    sessionStorage.clear();
+    Object.defineProperty(window, "webkitSpeechRecognition", { configurable: true, value: MockSpeechRecognition });
+  });
 
   it("空输入不跳页并显示就地提示", () => {
     render(<DreamApp />);
@@ -26,12 +47,20 @@ describe("正常路径前半段", () => {
     expect(screen.queryByDisplayValue("古镜")).not.toBeInTheDocument();
   });
 
-  it("模拟语音结束后也直接进入梦象确认", () => {
+  it("语音先转写到输入框，确认后才进入梦象识别", () => {
     render(<DreamApp />);
     fireEvent.click(screen.getByRole("button", { name: "开始语音记录" }));
-    fireEvent.click(screen.getByRole("button", { name: "结束并转写" }));
+    expect(screen.getByLabelText("写下梦境")).toHaveValue("我梦见一条蛇盘在古井边");
+    expect(screen.getByRole("heading", { name: /昨夜有梦.*今朝见象/ })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "结束转写" }));
+    expect(screen.getByText(/请先检查错字/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /昨夜有梦.*今朝见象/ })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("写下梦境"), { target: { value: "我梦见一条蛇盘在古井旁边" } });
+    fireEvent.click(screen.getByRole("button", { name: /开始寻象/ }));
     expect(screen.getByRole("heading", { name: "这是我们理解到的梦象" })).toBeInTheDocument();
-    expect(screen.queryByLabelText("完整转写内容")).not.toBeInTheDocument();
+    expect(screen.getByText(/古井旁边/)).toBeInTheDocument();
   });
 
   it("展示四个常见梦境提示并可填入输入框", () => {

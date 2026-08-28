@@ -67,6 +67,26 @@ const initialSession = (): AppSession => ({
 type RecordingState = "idle" | "recording" | "paused";
 type InputMode = "voice" | "text";
 
+interface SpeechRecognitionResultLike {
+  isFinal: boolean;
+  [index: number]: { transcript: string };
+}
+
+interface SpeechRecognitionLike {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  onstart: (() => void) | null;
+  onresult: ((event: { results: ArrayLike<SpeechRecognitionResultLike> }) => void) | null;
+  onerror: ((event: { error: string }) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+  abort: () => void;
+}
+
+type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
+
 interface UiState {
   session: AppSession;
   inputMode: InputMode;
@@ -84,6 +104,7 @@ type Action =
   | { type: "hydrateError" }
   | { type: "setInputMode"; mode: InputMode }
   | { type: "setDraft"; value: string }
+  | { type: "setVoiceTranscript"; value: string }
   | { type: "fillSample" }
   | { type: "submitDraft" }
   | { type: "startRecording" }
@@ -91,6 +112,7 @@ type Action =
   | { type: "resumeRecording" }
   | { type: "tickRecording" }
   | { type: "endRecording" }
+  | { type: "recordingError"; message: string }
   | { type: "updateSymbol"; field: SymbolField; index: number; value: string }
   | { type: "deleteSymbol"; field: SymbolField; index: number }
   | { type: "confirmSymbols" }
@@ -134,6 +156,8 @@ function reducer(state: UiState, action: Action): UiState {
       return { ...state, inputMode: action.mode, notice: "" };
     case "setDraft":
       return withSession(state, { ...session, draftText: action.value }, "");
+    case "setVoiceTranscript":
+      return withSession(state, { ...session, draftText: action.value }, "语音正在转写到输入框，可随时检查和修改。");
     case "fillSample":
       return withSession(state, { ...session, draftText: NORMAL_DREAM }, "示例梦境已填入，你仍可自由修改。");
     case "submitDraft": {
@@ -143,7 +167,7 @@ function reducer(state: UiState, action: Action): UiState {
       return withSession(state, { ...session, transcriptText, structure, step: "symbol_review" }, "梦境已记下，请直接确认识别到的梦象。");
     }
     case "startRecording":
-      return { ...state, recordingState: "recording", recordingSeconds: 0, notice: "模拟录音已开始。" };
+      return { ...state, recordingState: "recording", recordingSeconds: 0, notice: "正在识别普通话，转写会直接出现在输入框。" };
     case "pauseRecording":
       return { ...state, recordingState: "paused", notice: "录音已暂停。" };
     case "resumeRecording":
@@ -151,18 +175,21 @@ function reducer(state: UiState, action: Action): UiState {
     case "tickRecording":
       return { ...state, recordingSeconds: state.recordingSeconds + 1 };
     case "endRecording": {
-      const structure = extractDreamStructure(NORMAL_DREAM, session.inputRevision);
+      const transcriptText = session.draftText.trim();
       return {
         ...withSession(state, {
           ...session,
-          draftText: NORMAL_DREAM,
-          transcriptText: NORMAL_DREAM,
-          structure,
-          step: "symbol_review",
-        }, "模拟转写已完成，请直接确认识别到的梦象。"),
+          transcriptText,
+          structure: null,
+          step: "drafting",
+        }, transcriptText
+          ? "语音转写已放入输入框。请先检查错字，确认无误后再点击“开始寻象”。"
+          : "没有识别到清晰内容，请重试或直接输入文字。"),
         recordingState: "idle",
       };
     }
+    case "recordingError":
+      return { ...state, recordingState: "idle", notice: action.message };
     case "updateSymbol": {
       if (!session.structure) return state;
       const previous = session.structure[action.field][action.index];
@@ -316,6 +343,77 @@ function AppHeader({ state, dispatch }: { state: UiState; dispatch: React.Dispat
 
 function DraftPage({ state, dispatch }: { state: UiState; dispatch: React.Dispatch<Action> }) {
   const recording = state.recordingState;
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const transcriptBaseRef = useRef("");
+
+  useEffect(() => () => {
+    const recognition = recognitionRef.current;
+    if (!recognition) return;
+    recognition.onend = null;
+    recognition.abort();
+    recognitionRef.current = null;
+  }, []);
+
+  const beginVoiceTranscription = () => {
+    dispatch({ type: "setInputMode", mode: "voice" });
+    const speechWindow = window as typeof window & {
+      SpeechRecognition?: SpeechRecognitionConstructor;
+      webkitSpeechRecognition?: SpeechRecognitionConstructor;
+    };
+    const Recognition = speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
+
+    if (!Recognition) {
+      dispatch({ type: "recordingError", message: "当前浏览器不支持语音转写，请使用最新版 Safari、Chrome，或直接输入文字。" });
+      return;
+    }
+
+    const recognition = new Recognition();
+    transcriptBaseRef.current = state.session.draftText.trim();
+    recognition.lang = "zh-CN";
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.onstart = () => dispatch({ type: "startRecording" });
+    recognition.onresult = (event) => {
+      let spokenText = "";
+      for (let index = 0; index < event.results.length; index += 1) {
+        spokenText += event.results[index][0]?.transcript ?? "";
+      }
+      const value = [transcriptBaseRef.current, spokenText.trim()].filter(Boolean).join(" ").slice(0, 1000);
+      dispatch({ type: "setVoiceTranscript", value });
+    };
+    recognition.onerror = (event) => {
+      const message = event.error === "not-allowed" || event.error === "service-not-allowed"
+        ? "麦克风权限未开启。请允许浏览器访问麦克风后重试。"
+        : event.error === "no-speech"
+          ? "没有识别到清晰语音，请靠近麦克风后重试。"
+          : "语音识别暂时不可用，请检查网络后重试，或直接修改输入框文字。";
+      recognition.onend = null;
+      recognitionRef.current = null;
+      dispatch({ type: "recordingError", message });
+    };
+    recognition.onend = () => {
+      recognitionRef.current = null;
+      dispatch({ type: "endRecording" });
+    };
+    recognitionRef.current = recognition;
+
+    try {
+      recognition.start();
+    } catch {
+      recognitionRef.current = null;
+      dispatch({ type: "recordingError", message: "语音识别未能启动，请稍后重试或直接输入文字。" });
+    }
+  };
+
+  const finishVoiceTranscription = () => {
+    const recognition = recognitionRef.current;
+    if (recognition) {
+      recognition.onend = null;
+      recognition.stop();
+      recognitionRef.current = null;
+    }
+    dispatch({ type: "endRecording" });
+  };
 
   return (
     <section className="hero dream-home page-enter" aria-labelledby="draft-title">
@@ -323,6 +421,7 @@ function DraftPage({ state, dispatch }: { state: UiState; dispatch: React.Dispat
         <span className="moon-mark" />
         <i className="mist-ring mist-ring-one" />
         <i className="mist-ring mist-ring-two" />
+        <span className="dream-floaters">{Array.from({ length: 9 }, (_, index) => <i key={index} />)}</span>
       </div>
       <p className="eyebrow"><span /> TRACEABLE DREAM INTERPRETATION · 可追溯传统梦象 <span /></p>
       <div className="home-title-line">
@@ -345,10 +444,7 @@ function DraftPage({ state, dispatch }: { state: UiState; dispatch: React.Dispat
           }} placeholder="比如：我站在一座旧宅里，井边盘着一条蛇……" />
           <div className="compose-footer">
             <div className="entry-meta"><span>{state.session.draftText.length} / 1000</span><span>文字或语音都可以</span></div>
-            <button className="voice-corner" type="button" onClick={() => {
-              dispatch({ type: "setInputMode", mode: "voice" });
-              dispatch({ type: "startRecording" });
-            }} disabled={recording !== "idle"} aria-label="开始语音记录"><span aria-hidden="true" /></button>
+            <button className="voice-corner" type="button" onClick={beginVoiceTranscription} disabled={recording !== "idle"} aria-label="开始语音记录"><span aria-hidden="true" /></button>
           </div>
         </div>
 
@@ -358,16 +454,15 @@ function DraftPage({ state, dispatch }: { state: UiState; dispatch: React.Dispat
         </div>
 
         {recording !== "idle" ? <div className="recording-panel" role="status">
-          <span className={recording === "recording" ? "pulse-dot" : "pause-dot"} aria-hidden="true" />
-          <strong>{recording === "recording" ? "正在记录" : "录音已暂停"}</strong>
+          <span className="pulse-dot" aria-hidden="true" />
+          <strong>正在转写到输入框</strong>
           <time>{formatDuration(state.recordingSeconds)}</time>
-          <button type="button" onClick={() => dispatch({ type: recording === "recording" ? "pauseRecording" : "resumeRecording" })}>{recording === "recording" ? "暂停" : "继续"}</button>
-          <button type="button" onClick={() => dispatch({ type: "endRecording" })}>结束并转写</button>
+          <button type="button" onClick={finishVoiceTranscription}>结束转写</button>
         </div> : null}
 
         {state.notice ? <p className="entry-message" role="status">{state.notice}</p> : null}
         <div className="entry-actions home-entry-actions">
-          <p><span aria-hidden="true">◉</span> 梦境默认不会公开，录音仅为本地演示。</p>
+          <p><span aria-hidden="true">◉</span> 语音先转为可编辑文字；确认后才会进入解析。</p>
           <button className="primary-button" type="button" onClick={() => {
             dispatch({ type: "submitDraft" });
             if (state.session.draftText.trim()) track("dream_input_started", { input_mode: state.inputMode });

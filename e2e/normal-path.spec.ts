@@ -1,5 +1,49 @@
 import { expect, test } from "@playwright/test";
 
+test("语音转写留在首页输入框，用户确认后才继续", async ({ page }) => {
+  await page.addInitScript(() => {
+    class MockRecognition {
+      lang = "";
+      continuous = false;
+      interimResults = false;
+      onstart: (() => void) | null = null;
+      onresult: ((event: { results: ArrayLike<{ isFinal: boolean; 0: { transcript: string } }> }) => void) | null = null;
+      onerror: ((event: { error: string }) => void) | null = null;
+      onend: (() => void) | null = null;
+      start() {
+        this.onstart?.();
+        this.onresult?.({ results: [{ isFinal: true, 0: { transcript: "我梦见自己站在古井旁边" } }] });
+      }
+      stop() { this.onend?.(); }
+      abort() {}
+    }
+    const speechGlobal = globalThis as typeof globalThis & {
+      SpeechRecognition?: unknown;
+      webkitSpeechRecognition?: unknown;
+    };
+    speechGlobal.SpeechRecognition = MockRecognition;
+    speechGlobal.webkitSpeechRecognition = MockRecognition;
+  });
+  await page.goto("/");
+
+  const dreamInput = page.getByLabel("写下梦境");
+  await page.getByRole("button", { name: "开始语音记录" }).click();
+  await expect(dreamInput).toHaveValue("我梦见自己站在古井旁边");
+  await expect(page.getByRole("heading", { name: /昨夜有梦.*今朝见象/ })).toBeVisible();
+  await page.getByRole("button", { name: "结束转写" }).click();
+  await expect(page.getByText(/请先检查错字/)).toBeVisible();
+  await expect(page.getByRole("heading", { name: /昨夜有梦.*今朝见象/ })).toBeVisible();
+
+  const animationNames = await page.locator(".home-atmosphere").evaluate((element) =>
+    Array.from(element.querySelectorAll(".mist-ring, .dream-floaters i"))
+      .map((item) => getComputedStyle(item).animationName),
+  );
+  expect(animationNames.some((name) => name !== "none")).toBe(true);
+
+  await page.getByRole("button", { name: /开始寻象/ }).click();
+  await expect(page.getByRole("heading", { name: "这是我们理解到的梦象" })).toBeVisible();
+});
+
 test("快捷梦境从输入走到卡片并可返回纠正", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("group", { name: "梦境输入方式" })).toHaveCount(0);
