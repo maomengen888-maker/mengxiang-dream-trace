@@ -4,11 +4,13 @@ import {
   CardSpecSchema,
   KnowledgeEntrySchema,
   P3908_KNOWLEDGE_ENTRIES,
+  UNVERIFIED_RELATED_REFERENCES,
   candidateEntriesFor,
   clarificationKindFor,
   createCardSpec,
   createInterpretation,
   extractDreamStructure,
+  isDisplayVerifiedEntry,
   reviseSession,
   safeTelemetry,
 } from "../app/domain";
@@ -27,6 +29,17 @@ describe("P.3908 知识条目边界", () => {
     const invalid = { ...P3908_KNOWLEDGE_ENTRIES[0], verificationStatus: "verified" };
     expect(() => KnowledgeEntrySchema.parse(invalid)).toThrow();
   });
+
+  it("来源、原文或页叶未齐全时不允许显示为已核验", () => {
+    const pendingLocation = {
+      ...UNVERIFIED_RELATED_REFERENCES[0],
+      verificationStatus: "verified" as const,
+      verifiedBy: "tester",
+      verifiedAt: "2026-08-28",
+    };
+    expect(() => KnowledgeEntrySchema.parse(pendingLocation)).toThrow();
+    expect(isDisplayVerifiedEntry(UNVERIFIED_RELATED_REFERENCES[0])).toBe(false);
+  });
 });
 
 describe("梦境结构与修订", () => {
@@ -43,7 +56,7 @@ describe("梦境结构与修订", () => {
     const result = createInterpretation(structure, "没有");
     expect(candidates.length).toBeGreaterThan(0);
     expect(result.evidenceEntryIds).toEqual([]);
-    expect(result.uncertaintyNotes.join(" ")).toContain("尚未完成叶面与栏位核验");
+    expect(result.uncertaintyNotes.join(" ")).toContain("尚未完成来源、原文与页叶核验");
   });
 
   it("记不清时不能得到较明确信号", () => {
@@ -55,10 +68,22 @@ describe("梦境结构与修订", () => {
     const falling = extractDreamStructure("我梦见自己从悬崖边掉了下去，一直往下坠，快落地时惊醒了。");
     const teeth = extractDreamStructure("我梦见自己的牙齿一颗颗松动掉落，想说话却发不出声音。");
     const water = extractDreamStructure("我梦见自己走进很深的水里，四周起雾，怎么也找不到回去的方向。");
-    expect(createInterpretation(falling, "").title).toBe("悬崖之下");
+    expect(createInterpretation(falling, "").title).toBe("坠而未落，凶象未成");
     expect(createInterpretation(teeth, "").title).toBe("齿落无声");
     expect(createInterpretation(water, "").title).toBe("雾水迷途");
     expect(createInterpretation(falling, "").detailedReading).not.toContain("蛇");
+  });
+
+  it("落地前惊醒只匹配相近条目且不套用大凶结论", () => {
+    const structure = extractDreamStructure("我梦见自己从悬崖边掉了下去，一直往下坠，快落地时惊醒了。");
+    const result = createInterpretation(structure, "");
+    const card = createCardSpec(structure, result);
+    expect(candidateEntriesFor(structure)[0].verificationStatus).toBe("pending");
+    expect(result.coreStatement).toBe("传统判断：部分匹配，暂不确断吉凶。");
+    expect(result.evidenceEntryIds).toEqual([]);
+    expect(result.detailedReading).toContain("不能直接套用“大凶”的结论");
+    expect(card.detailedReading).toContain("此梦未曾落地");
+    expect(card.oneLineSummary).toBe("相近条目 · 出处核验完成后展示原文页叶");
   });
 
   it("模糊水面只追问一个位置问题，并让明确回答改变确定性", () => {

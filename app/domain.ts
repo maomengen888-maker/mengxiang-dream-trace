@@ -45,6 +45,10 @@ export const KnowledgeEntrySchema = z.object({
       context.addIssue({ code: "custom", path: [field], message });
     }
   });
+
+  if (/(待|尚未|未核验)/.test(entry.sourceLocation)) {
+    context.addIssue({ code: "custom", path: ["sourceLocation"], message: "已核验条目不能使用待核验位置" });
+  }
 });
 
 export type KnowledgeEntry = z.infer<typeof KnowledgeEntrySchema>;
@@ -161,6 +165,33 @@ export const P3908_KNOWLEDGE_ENTRIES: KnowledgeEntry[] = [
   pendingEntry("p3908-flight-001", "飞", "待对照写本确认与飞行相关条目的原文和适用条件。"),
 ];
 
+export const UNVERIFIED_RELATED_REFERENCES: KnowledgeEntry[] = [
+  KnowledgeEntrySchema.parse({
+    entryId: "related-falling-001",
+    symbol: "从高处坠落",
+    aliases: ["悬崖坠落", "从高坠地"],
+    relatedSymbols: [],
+    conditions: ["从高处坠落", "已经坠地"],
+    originalText: "梦见从高坠地，大凶。",
+    modernInterpretation: "仅作为网络整理文本中的相近占辞；在完成底本、页叶与原文核验前，不得据此确断吉凶。",
+    sourceTitle: "网络整理文本（待与敦煌写本核验）",
+    sourceLocation: "尚未确切归到 P.3908 的具体页叶",
+    edition: "待与 BnF P.3908 原件或郑炳林《敦煌写本解梦书校录研究》核对",
+    verificationStatus: "pending",
+    verifiedBy: "",
+    verifiedAt: "",
+    notes: "梦境为落地前惊醒，不满足整理文本中“坠地”的完整条件；不得标为 P.3908 已核验。",
+  }),
+];
+
+export function isDisplayVerifiedEntry(entry: KnowledgeEntry) {
+  return entry.verificationStatus === "verified"
+    && Boolean(entry.originalText.trim())
+    && Boolean(entry.sourceTitle.trim())
+    && Boolean(entry.sourceLocation.trim())
+    && !/(待|尚未|未核验)/.test(entry.sourceLocation);
+}
+
 function includesAny(text: string, candidates: string[]) {
   return candidates.some((candidate) => text.includes(candidate));
 }
@@ -235,7 +266,8 @@ export function candidateEntriesFor(structure: DreamStructure) {
     ...structure.actions,
   ].flatMap((term) => term.includes("古井") ? [term, "井"] : term.includes("旧宅") ? [term, "宅"] : [term]));
 
-  return P3908_KNOWLEDGE_ENTRIES.filter((entry) => terms.has(entry.symbol));
+  return [...P3908_KNOWLEDGE_ENTRIES, ...UNVERIFIED_RELATED_REFERENCES]
+    .filter((entry) => terms.has(entry.symbol));
 }
 
 export function createInterpretation(
@@ -243,7 +275,7 @@ export function createInterpretation(
   clarificationAnswer: string,
 ): Interpretation {
   const candidates = candidateEntriesFor(structure);
-  const verified = candidates.filter((entry) => entry.verificationStatus === "verified");
+  const verified = candidates.filter(isDisplayVerifiedEntry);
   const hasSnake = structure.objects.includes("蛇");
   const isChase = structure.actions.includes("被蛇追赶");
   const isFalling = structure.actions.includes("从高处坠落");
@@ -257,8 +289,10 @@ export function createInterpretation(
       : []),
     ...(candidates.length === 0
       ? ["演示知识库暂无直接记载；本次不强行类比，也不会伪造古籍原文。"]
+      : isFalling
+      ? ["相近占辞的底本归属与 P.3908 具体页叶尚未核验，且梦境没有满足“已经坠地”的条件，因此暂不确断吉凶。"]
       : verified.length === 0
-      ? ["P.3908 主版本已经确定，但相关条目尚未完成叶面与栏位核验，本次不标记为直接记载。"]
+      ? ["相关条目尚未完成来源、原文与页叶核验，本次不标记为直接记载，也不生成确定判词。"]
       : []),
   ];
 
@@ -272,11 +306,11 @@ export function createInterpretation(
       }
     : isFalling
     ? {
-        title: "悬崖之下",
-        coreStatement: "坠落感很真实，但它更像对“失去掌控”的身体化表达，不是现实危险的预告。",
-        detailedReading: "梦中的悬崖把边界变得异常清楚，持续下坠则容易对应到近期无法确定结果、进度或支撑点的体验。快落地时惊醒，说明情绪在最紧张的地方中断了画面。不妨把最近那件“心里没底”的事拆成一个可确认的下一步。",
-        oneLineSummary: "一句话总结：悬崖是边界，坠落是失控感；先找回一个可以落脚的小步骤。",
-        focusPoints: ["最近哪件事让你感到没有支撑", "把不可控与可控部分分开", "先完成一个最小的下一步"],
+        title: "坠而未落，凶象未成",
+        coreStatement: "传统判断：部分匹配，暂不确断吉凶。",
+        detailedReading: "你梦见自己从悬崖坠下，但在落地前惊醒。敦煌梦书网络整理文本中有相近占辞：“梦见从高坠地，大凶。”关键差异在于：该条目描述的是“已经坠地”，而你的梦停在坠落途中。因此，本次只能识别为“从高处坠落”的相近梦象，不能直接套用“大凶”的结论。",
+        oneLineSummary: "古籍有“从高坠地，大凶”之说；但此梦未曾落地，只属相近梦象，不作确断。",
+        focusPoints: ["命中梦象：从高处坠落", "匹配类型：相近条目", "未满足条件：没有落地"],
       }
     : isTeeth
       ? {
@@ -351,6 +385,8 @@ export function createInterpretation(
         : ["最近那件既担心又想靠近的事", "先确认自己的边界与安全感", "把好奇变成一次小而可控的行动"],
     certaintyLevel: hasSnake
       ? clarificationAnswer === "记不清" || !clarificationAnswer ? "associative" : "reserved"
+      : isFalling
+        ? "reserved"
       : isAmbiguousWater
         ? clarificationAnswer === "岸边" || clarificationAnswer === "水中" ? "reserved" : "associative"
         : "associative",
@@ -358,7 +394,9 @@ export function createInterpretation(
     workflowVersion: "fixture-workflow-v1",
     evidenceEntryIds: verified.map((entry) => entry.entryId),
     uncertaintyNotes,
-    safetyNotice: "内容基于传统文化资料生成，仅供文化娱乐与个人记录，不构成医疗、心理、法律或投资建议。",
+    safetyNotice: isFalling
+      ? "内容基于传统梦文化资料，仅供文化娱乐与个人记录，不预示现实危险。"
+      : "内容基于传统文化资料生成，仅供文化娱乐与个人记录，不构成医疗、心理、法律或投资建议。",
   } satisfies Interpretation;
 
   return InterpretationSchema.parse(interpretation);
@@ -374,13 +412,19 @@ export function createCardSpec(
     .filter((element) => !sensitivePattern.test(element))
     .slice(0, 4);
 
+  const isFalling = structure.actions.includes("从高处坠落");
+
   return CardSpecSchema.parse({
     inputRevision: interpretation.inputRevision,
     interpretationId: interpretation.interpretationId,
     title: interpretation.title,
     coreStatement: interpretation.coreStatement,
-    detailedReading: interpretation.detailedReading,
-    oneLineSummary: interpretation.oneLineSummary,
+    detailedReading: isFalling
+      ? "古籍有“从高坠地，大凶”之说；但此梦未曾落地，只属相近梦象，不作确断。"
+      : interpretation.detailedReading,
+    oneLineSummary: isFalling
+      ? "相近条目 · 出处核验完成后展示原文页叶"
+      : interpretation.oneLineSummary,
     focusPoints: interpretation.focusPoints,
     visualElements,
     style: "幽暗水墨",

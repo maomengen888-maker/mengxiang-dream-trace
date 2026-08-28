@@ -1058,6 +1058,19 @@ footer p { margin: 0; }
 .result-shell .reading-panel > h2 { font-weight: 500; }
 .result-shell .reading-panel > p { color: #4e575d; }
 .result-shell .reading-panel > blockquote { border-color: #a44338; color: #783b35; }
+.result-shell .falling-reading > h2 { margin-bottom: 18px; }
+.related-verse { margin: 28px 0; padding: 20px 22px; border: 1px solid rgba(164,67,56,.14); border-radius: 14px; background: rgba(164,67,56,.035); }
+.related-verse small { color: #8d6862; font-size: 10px; letter-spacing: .08em; }
+.related-verse blockquote { margin: 12px 0 0; color: #783b35; font-family: "Songti SC", STSong, serif; font-size: 22px; line-height: 1.7; }
+.match-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 32px 0 0; border-top: 1px solid rgba(35,45,55,.09); }
+.match-facts div { display: grid; grid-template-columns: 92px 1fr; gap: 12px; padding: 14px 0; border-bottom: 1px solid rgba(35,45,55,.09); }
+.match-facts div:nth-child(odd) { padding-right: 22px; }
+.match-facts div:nth-child(even) { padding-left: 22px; border-left: 1px solid rgba(35,45,55,.09); }
+.match-facts dt { color: #8b9196; font-size: 11px; }
+.match-facts dd { margin: 0; color: #30383d; font-size: 12px; font-weight: 650; }
+.modern-note { margin-top: 30px; padding: 20px 22px; border-radius: 14px; background: #edf1f4; }
+.modern-note span { color: #6d638b; font-size: 10px; font-weight: 700; letter-spacing: .08em; }
+.modern-note p { margin: 10px 0 0; color: #616a70; font-size: 13px; line-height: 1.8; }
 .result-shell .focus-list { border-color: rgba(35,45,55,.09); }
 .result-shell .result-card {
   overflow: hidden;
@@ -1129,6 +1142,8 @@ footer p { margin: 0; }
   .result-shell .result-hero { align-items: stretch; grid-template-columns: 1fr; gap: 18px; }
   .result-shell .result-actions-top .secondary-button { width: 100%; }
   .result-shell .reading-panel { border-radius: 20px; }
+  .match-facts { grid-template-columns: 1fr; }
+  .match-facts div:nth-child(odd), .match-facts div:nth-child(even) { padding: 13px 0; border-left: 0; }
   .result-shell .result-card { border-radius: 20px; }
   .result-shell .explanation-grid { grid-template-columns: 1fr; }
 }

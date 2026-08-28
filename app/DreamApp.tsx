@@ -555,6 +555,8 @@ function ResultPage({ state, dispatch }: { state: UiState; dispatch: React.Dispa
   const candidates = candidateEntriesFor(structure);
   const hasCandidateSource = candidates.length > 0;
   const hasSnake = structure.objects.includes("蛇");
+  const isFalling = structure.actions.includes("从高处坠落");
+  const fallingReference = isFalling ? candidates.find((entry) => entry.entryId === "related-falling-001") : null;
   const primarySymbol = structure.objects[0] ?? structure.scene[0] ?? "主要梦象";
   const personalClue = structure.actions[0] ?? structure.emotions[0] ?? "你确认的梦境细节";
   const certainty = result.certaintyLevel === "reserved" ? "有保留" : result.certaintyLevel === "associative" ? "仅供联想" : "较明确";
@@ -566,7 +568,7 @@ function ResultPage({ state, dispatch }: { state: UiState; dispatch: React.Dispa
         <div>
           <p className="eyebrow"><span /> 已完成 · 修订 R{result.inputRevision}</p>
           <div className="result-title-row"><h1>{result.title}</h1><span className="certainty-badge">{certainty}</span></div>
-          <p className="dream-summary">你的解释与结果卡片已经同时生成。卡片基于本次确认内容，只生成一次。</p>
+          <p className="dream-summary">{isFalling ? "传统判断：部分匹配，暂不确断吉凶。" : "你的解释与结果卡片已经同时生成。卡片基于本次确认内容，只生成一次。"}</p>
         </div>
         <div className="result-actions-top">
           <button type="button" className="secondary-button" onClick={() => dispatch({ type: "reviseResult" })}>纠正梦象</button>
@@ -576,15 +578,31 @@ function ResultPage({ state, dispatch }: { state: UiState; dispatch: React.Dispa
       {state.notice ? <p className="result-notice" role="status">✓ {state.notice}</p> : null}
 
       <div className="result-feature-grid">
-        <article className="reading-panel">
-          <div className="reading-label"><span>梦境解释</span><small>综合说明 · 非典籍原文</small></div>
-          <h2>{result.coreStatement}</h2>
-          <p>{result.detailedReading}</p>
-          <blockquote>{result.oneLineSummary}</blockquote>
-          <div className="focus-list">
-            <span>你可以留意</span>
-            <ol>{result.focusPoints.map((point, index) => <li key={point}><i>{String(index + 1).padStart(2, "0")}</i>{point}</li>)}</ol>
-          </div>
+        <article className={`reading-panel ${isFalling ? "falling-reading" : ""}`}>
+          {isFalling ? <>
+            <div className="reading-label"><span>传统判断</span><small>相近条目 · 暂不确断</small></div>
+            <h2>{result.coreStatement}</h2>
+            <p>你梦见自己从悬崖坠下，但在落地前惊醒。</p>
+            <div className="related-verse"><small>网络整理文本中的相近占辞 · 待核验</small><blockquote>“梦见从高坠地，大凶。”</blockquote></div>
+            <p><strong>关键差异在于：</strong>古籍整理条目描述的是“已经坠地”，而你的梦停在坠落途中。因此，本次只能识别为“从高处坠落”的相近梦象，不能直接套用“大凶”的结论。</p>
+            <dl className="match-facts">
+              <div><dt>命中梦象</dt><dd>从高处坠落</dd></div>
+              <div><dt>匹配类型</dt><dd>相近条目</dd></div>
+              <div><dt>匹配程度</dt><dd>中</dd></div>
+              <div><dt>未满足条件</dt><dd>没有落地</dd></div>
+              <div><dt>古籍结论</dt><dd>暂不确断</dd></div>
+            </dl>
+            <aside className="modern-note"><span>现代提示 · 非古籍解释</span><p>坠落体验可能与近期的不确定感或失控感有关，但仅凭这段梦境无法判断具体对应工作、关系或生活中的哪件事。</p></aside>
+          </> : <>
+            <div className="reading-label"><span>梦境解释</span><small>综合说明 · 非典籍原文</small></div>
+            <h2>{result.coreStatement}</h2>
+            <p>{result.detailedReading}</p>
+            <blockquote>{result.oneLineSummary}</blockquote>
+            <div className="focus-list">
+              <span>你可以留意</span>
+              <ol>{result.focusPoints.map((point, index) => <li key={point}><i>{String(index + 1).padStart(2, "0")}</i>{point}</li>)}</ol>
+            </div>
+          </>}
         </article>
 
         <article className="result-card" aria-label="梦象结果卡片">
@@ -593,9 +611,9 @@ function ResultPage({ state, dispatch }: { state: UiState; dispatch: React.Dispa
             <div className="result-card-meta"><span>{date}</span><b>自动生成 · 仅一次</b></div>
             <h2>{card.title}</h2>
             <p>{card.detailedReading}</p>
-            <blockquote>{card.oneLineSummary}</blockquote>
+            {!isFalling ? <blockquote>{card.oneLineSummary}</blockquote> : null}
             <div className="card-elements">{card.visualElements.map((element) => <span key={element}>{element}</span>)}</div>
-            <small>P.3908 主版本已确认 · 具体条目待核验 · 仅供文化娱乐与个人记录</small>
+            <small>{isFalling ? card.oneLineSummary : "条目未核验 · 不显示确定判词 · 仅供文化娱乐与个人记录"}</small>
           </div>
           <div className="result-card-actions">
             <button type="button" onClick={() => {
@@ -613,8 +631,8 @@ function ResultPage({ state, dispatch }: { state: UiState; dispatch: React.Dispa
       <section className="result-section">
         <div className="section-heading"><p>这份解释从哪里来</p><span>梦境事实与来源分开呈现</span></div>
         <div className="explanation-grid">
-          <article><div><span className={`evidence-tag ${hasCandidateSource ? "pending" : "empty"}`}>{hasCandidateSource ? "待核验来源" : "暂无直接记载"}</span><h2>{primarySymbol}</h2></div><p>{hasCandidateSource ? "主要梦象已由你确认，但 P.3908 中对应原文尚未完成叶面与栏位核验，不会展示成“直接记载”。" : "演示知识库没有找到可核验的直接条目。本次不会强行类比，也不会把现代物件伪装成古籍原文。"}</p></article>
-          <article><div><span className="evidence-tag synthesis">模型综合</span><h2>{personalClue}</h2></div><p>这段综合只使用你确认过的情绪或行为组织解释；它不属于古籍原文，也不构成现实预测。</p></article>
+          <article><div><span className={`evidence-tag ${hasCandidateSource ? "pending" : "empty"}`}>{isFalling ? "相近条目" : hasCandidateSource ? "待核验来源" : "暂无直接记载"}</span><h2>{isFalling ? "从高处坠落" : primarySymbol}</h2></div><p>{isFalling ? "整理文本描述“已经坠地”，本次梦境为落地前惊醒，条件并不完全相同；只显示相近关系，不输出“大凶”。" : hasCandidateSource ? "主要梦象已由你确认，但对应原文尚未完成来源、页叶与栏位核验，不会展示成“直接记载”。" : "演示知识库没有找到可核验的直接条目。本次不会强行类比，也不会把现代物件伪装成古籍原文。"}</p></article>
+          <article><div><span className="evidence-tag synthesis">现代提示</span><h2>{isFalling ? "不确定感或失控感" : personalClue}</h2></div><p>{isFalling ? "这是现代心理联想，不属于古籍结论，也无法仅凭梦境对应到现实中的具体事件。" : "这段综合只使用你确认过的情绪或行为组织解释；它不属于古籍原文，也不构成现实预测。"}</p></article>
         </div>
       </section>
 
@@ -623,17 +641,18 @@ function ResultPage({ state, dispatch }: { state: UiState; dispatch: React.Dispa
           dispatch({ type: "toggleSource" });
           track("source_opened", { entry_id: candidates[0]?.entryId ?? "none", verification_status: "pending" });
         }} aria-expanded={state.sourceOpen}>
-          <span><small>主版本来源</small><strong>敦煌写本 P.3908《新集周公解梦书》</strong></span>
+          <span><small>{isFalling ? "来源核验状态" : "主版本来源"}</small><strong>{isFalling ? "相近占辞待回查 P.3908 原件与校录研究" : "敦煌写本 P.3908《新集周公解梦书》"}</strong></span>
           <i>{state.sourceOpen ? "收起" : "查看来源边界"} <b aria-hidden="true">{state.sourceOpen ? "−" : "+"}</b></i>
         </button>
         {state.sourceOpen ? <div className="source-detail">
           <dl>
             <div><dt>馆藏号</dt><dd>{P3908_SOURCE.shelfmark}</dd></div>
             <div><dt>馆藏机构</dt><dd>{P3908_SOURCE.holdingInstitution}</dd></div>
-            <div><dt>条目状态</dt><dd><span className="pending-text">{hasCandidateSource ? "待逐页核验" : "暂无候选条目"}</span></dd></div>
-            <div><dt>具体位置</dt><dd>{hasCandidateSource ? "尚未记录叶面与栏位" : "本次未找到可核验位置"}</dd></div>
+            <div><dt>条目状态</dt><dd><span className="pending-text">{isFalling ? "相近条目 · 未核验" : hasCandidateSource ? "待逐页核验" : "暂无候选条目"}</span></dd></div>
+            <div><dt>参考文本</dt><dd>{isFalling ? fallingReference?.originalText : "—"}</dd></div>
+            <div><dt>具体位置</dt><dd>{isFalling ? "出处、卷号与页叶待核验" : hasCandidateSource ? "尚未记录叶面与栏位" : "本次未找到可核验位置"}</dd></div>
           </dl>
-          <div className="source-boundary"><strong>为什么没有展示原文？</strong><p>{hasCandidateSource ? "选定主版本不等于具体条目已经核验。只有完成数字影像对照、位置记录和人工复核后，才能标记“直接记载”。" : "当前梦象没有直接候选。无出处时保留空结果，比为了完整感伪造一条古籍解释更可靠。"}</p></div>
+          <div className="source-boundary"><strong>{isFalling ? "为什么不能标记“已核验”？" : "为什么没有展示原文？"}</strong><p>{isFalling ? "当前占辞来自网络整理文本，尚未确切归到 P.3908 的具体页叶；而且梦境没有满足“已经坠地”的条件。只有来源、原文和页叶全部齐全，才能显示“已核验”并据此判断。" : hasCandidateSource ? "选定主版本不等于具体条目已经核验。只有来源、原文、页叶与人工复核记录全部齐全，才能标记“直接记载”。" : "当前梦象没有直接候选。无出处时保留空结果，比为了完整感伪造一条古籍解释更可靠。"}</p></div>
           <div className="source-links"><a href={P3908_SOURCE.catalogUrl} target="_blank" rel="noreferrer">BnF 馆藏记录 ↗</a><a href={P3908_SOURCE.digitizationUrl} target="_blank" rel="noreferrer">Gallica 数字影像 ↗</a></div>
         </div> : null}
       </section>

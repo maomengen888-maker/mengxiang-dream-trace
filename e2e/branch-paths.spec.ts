@@ -40,3 +40,23 @@ test("现代手机碎屏显示无直接出处且不强行类比", async ({ page 
   await expect(page.getByText("暂无候选条目")).toBeVisible();
   await expect(page.getByText("本次未找到可核验位置")).toBeVisible();
 });
+
+test("悬崖坠落未落地只显示相近条目与待核验状态", async ({ page }) => {
+  await page.getByRole("button", { name: /掉入悬崖/ }).click();
+  await page.getByRole("button", { name: /开始寻象/ }).click();
+  await page.getByRole("button", { name: /看起来准确/ }).click();
+  await page.getByRole("button", { name: /跳过沉浸过程/ }).click();
+
+  await expect(page.getByRole("heading", { name: "坠而未落，凶象未成", level: 1 })).toBeVisible();
+  await expect(page.getByText("传统判断：部分匹配，暂不确断吉凶。").first()).toBeVisible();
+  await expect(page.getByText("梦见从高坠地，大凶。")).toBeVisible();
+  await expect(page.getByText("没有落地", { exact: true })).toBeVisible();
+  await expect(page.getByText("古籍结论", { exact: true })).toBeVisible();
+  await expect(page.getByText("暂不确断", { exact: true })).toBeVisible();
+  await expect(page.locator(".result-card-body")).toContainText("此梦未曾落地，只属相近梦象，不作确断");
+  await expect(page.locator(".result-card-body")).toContainText("相近条目 · 出处核验完成后展示原文页叶");
+
+  await page.getByRole("button", { name: /相近占辞待回查/ }).click();
+  await expect(page.getByText("相近条目 · 未核验")).toBeVisible();
+  await expect(page.getByText("出处、卷号与页叶待核验")).toBeVisible();
+});
