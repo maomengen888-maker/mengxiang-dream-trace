@@ -67,6 +67,8 @@ export const DreamStructureSchema = z.object({
 
 export type DreamStructure = z.infer<typeof DreamStructureSchema>;
 
+export type ClarificationKind = "snake_attack" | "water_position";
+
 export const InterpretationSchema = z.object({
   interpretationId: z.string().min(1),
   inputRevision: z.number().int().positive(),
@@ -172,7 +174,15 @@ export function extractDreamStructure(
   const objects = [
     ...(text.includes("蛇") ? ["蛇"] : []),
     ...(text.includes("古井") ? ["古井"] : text.includes("古镜") ? ["古镜"] : []),
+    ...(text.includes("悬崖") ? ["悬崖"] : []),
+    ...(includesAny(text, ["牙齿", "牙"]) ? ["牙齿"] : []),
+    ...(includesAny(text, ["手机", "屏幕"]) ? ["手机屏幕"] : []),
+    ...(text.includes("水") ? ["水"] : []),
+    ...(text.includes("雾") ? ["雾"] : []),
   ];
+
+  const waterPositionIsAmbiguous = text.includes("水面")
+    && !includesAny(text, ["岸边", "水中", "水里", "走进水", "进入水"]);
 
   return DreamStructureSchema.parse({
     dreamId,
@@ -181,6 +191,8 @@ export function extractDreamStructure(
     scene: [
       ...(includesAny(text, ["旧宅", "宅"] ) ? ["旧宅"] : []),
       ...(includesAny(text, ["夜里", "夜晚", "夜"] ) ? ["夜晚"] : []),
+      ...(text.includes("悬崖边") ? ["悬崖边"] : []),
+      ...(text.includes("水里") ? ["水中"] : []),
     ],
     characters: [
       "自己",
@@ -190,15 +202,30 @@ export function extractDreamStructure(
     actions: [
       ...(text.includes("盘") ? ["蛇盘在井边"] : []),
       ...(text.includes("靠近") ? ["自己主动靠近"] : []),
+      ...(includesAny(text, ["追着我", "被蛇追", "蛇追"]) ? ["被蛇追赶"] : []),
+      ...(includesAny(text, ["往下坠", "掉了下去", "坠落"]) ? ["从高处坠落"] : []),
+      ...(includesAny(text, ["牙齿一颗颗", "牙齿掉落"]) ? ["牙齿掉落"] : []),
+      ...(includesAny(text, ["屏幕碎", "手机碎", "手机屏幕裂"]) ? ["手机屏幕碎裂"] : []),
+      ...(includesAny(text, ["迷路", "找不到回去"]) ? ["在水中迷路"] : []),
     ],
     emotions: [
       ...(text.includes("害怕") ? ["害怕"] : []),
       ...(includesAny(text, ["好奇", "忍不住"] ) ? ["好奇"] : []),
+      ...(includesAny(text, ["惊醒", "拼命", "发不出声音", "找不到"]) ? ["紧张"] : []),
     ],
     relations: objects.includes("蛇") && objects.includes("古井") ? ["蛇靠近古井"] : [],
-    uncertainFields: objects.includes("蛇") ? ["蛇是否具有攻击性"] : [],
-    userEdits: confirmedText.includes("古井") ? [{ field: "objects", from: "古镜", to: "古井" }] : [],
+    uncertainFields: [
+      ...(objects.includes("蛇") ? ["蛇是否具有攻击性"] : []),
+      ...(waterPositionIsAmbiguous ? ["自己与水面的位置关系"] : []),
+    ],
+    userEdits: [],
   });
+}
+
+export function clarificationKindFor(structure: DreamStructure): ClarificationKind | null {
+  if (structure.objects.includes("蛇")) return "snake_attack";
+  if (structure.uncertainFields.includes("自己与水面的位置关系")) return "water_position";
+  return null;
 }
 
 export function candidateEntriesFor(structure: DreamStructure) {
@@ -217,41 +244,116 @@ export function createInterpretation(
 ): Interpretation {
   const candidates = candidateEntriesFor(structure);
   const verified = candidates.filter((entry) => entry.verificationStatus === "verified");
+  const hasSnake = structure.objects.includes("蛇");
+  const isChase = structure.actions.includes("被蛇追赶");
+  const isFalling = structure.actions.includes("从高处坠落");
+  const isTeeth = structure.actions.includes("牙齿掉落");
+  const isPhone = structure.actions.includes("手机屏幕碎裂") || structure.objects.includes("手机屏幕");
+  const isWater = structure.actions.includes("在水中迷路") || structure.objects.includes("水");
+  const isAmbiguousWater = structure.uncertainFields.includes("自己与水面的位置关系");
   const uncertaintyNotes = [
-    ...(clarificationAnswer === "记不清" || !clarificationAnswer
+    ...(hasSnake && (clarificationAnswer === "记不清" || !clarificationAnswer)
       ? ["蛇是否攻击仍不明确，因此不能给出较明确结论。"]
       : []),
-    ...(verified.length === 0
+    ...(candidates.length === 0
+      ? ["演示知识库暂无直接记载；本次不强行类比，也不会伪造古籍原文。"]
+      : verified.length === 0
       ? ["P.3908 主版本已经确定，但相关条目尚未完成叶面与栏位核验，本次不标记为直接记载。"]
       : []),
   ];
 
+  const nonSnakeReading = isPhone
+    ? {
+        title: "碎屏之梦",
+        coreStatement: "演示知识库暂无“手机屏幕碎裂”的直接记载，这里只保留现代生活经验中的自我观察线索。",
+        detailedReading: "手机与屏幕属于现代物件，不能伪装成 P.3908 的古籍条目，也不会为了得到一个好看的答案而强行关联到“镜”。如果只从你的梦境事实出发，碎裂的屏幕可以提醒你留意近期沟通、连接或边界是否让你感到脆弱；这只是联想，不是预言。",
+        oneLineSummary: "一句话总结：古籍没有直接答案；把碎屏当作沟通与边界的自我观察线索即可。",
+        focusPoints: ["最近哪段沟通让你感到脆弱", "区分真实发生与梦中联想", "不确定时保留没有答案的空间"],
+      }
+    : isFalling
+    ? {
+        title: "悬崖之下",
+        coreStatement: "坠落感很真实，但它更像对“失去掌控”的身体化表达，不是现实危险的预告。",
+        detailedReading: "梦中的悬崖把边界变得异常清楚，持续下坠则容易对应到近期无法确定结果、进度或支撑点的体验。快落地时惊醒，说明情绪在最紧张的地方中断了画面。不妨把最近那件“心里没底”的事拆成一个可确认的下一步。",
+        oneLineSummary: "一句话总结：悬崖是边界，坠落是失控感；先找回一个可以落脚的小步骤。",
+        focusPoints: ["最近哪件事让你感到没有支撑", "把不可控与可控部分分开", "先完成一个最小的下一步"],
+      }
+    : isTeeth
+      ? {
+          title: "齿落无声",
+          coreStatement: "牙齿掉落和无法出声同时出现，梦的重心更像是表达、体面与无力感。",
+          detailedReading: "牙齿在日常体验里与外观、表达和掌控有关；一颗颗松动，会把“某些事正在失去原有稳定”的感觉放大。想说却说不出，则值得留意近期是否有未表达的担心或需求。它不是身体诊断，也不预示会发生损失。",
+          oneLineSummary: "一句话总结：牙落是稳定感在松动，无声是表达受阻；先说清一件真正在意的事。",
+          focusPoints: ["最近有什么话一直没说出口", "你正在担心哪种评价或失去", "用一句简单的话提出需求"],
+        }
+      : isWater
+        ? {
+            title: isAmbiguousWater ? "水面未明" : "雾水迷途",
+            coreStatement: isAmbiguousWater
+              ? clarificationAnswer === "岸边"
+                ? "你停在岸边观察水面，梦的重心更接近面对未知前的犹豫与判断。"
+                : clarificationAnswer === "水中"
+                  ? "你已经身处水中，梦的重心更接近被情绪或处境包围时寻找方向。"
+                  : "你与水面的位置仍记不清，因此这次只保留多种可能，不替你补全梦境。"
+              : "深水、雾和迷路共同指向一种“情绪很深，方向还不清楚”的体验。",
+            detailedReading: isAmbiguousWater
+              ? clarificationAnswer === "岸边"
+                ? "站在岸边意味着你仍与水保持距离：可以看见变化，却还没有决定是否进入。它更适合用来观察近期某个尚在评估的选择。P.3908 的相关条目仍待逐页核验，因此这里只做有保留的综合说明。"
+                : clarificationAnswer === "水中"
+                  ? "身在水中会放大行动受阻和方向不清的感觉。它更适合用来观察近期是否已经卷入一件难以抽身的事，并提醒自己先寻找可返回的边界。P.3908 的相关条目仍待逐页核验。"
+                  : "因为你记不清自己在岸边还是水中，我们同时保留“尚未进入”和“已经卷入”两种可能。与其追求唯一答案，不如先确认醒来后最明显的情绪。"
+              : "水会让行动变慢，雾会缩短能看清的距离，找不到回路则把不确定感集中在一起。这个梦不必被解读成凶兆，它更像在提醒：当下不用一次看清整条路，先确认离自己最近的一个方向即可。",
+            oneLineSummary: isAmbiguousWater
+              ? clarificationAnswer === "岸边"
+                ? "一句话总结：岸边是观望，水面是未知；先看清边界，再决定是否进入。"
+                : clarificationAnswer === "水中"
+                  ? "一句话总结：身在水中，先找边界；不用一次看清整条路。"
+                  : "一句话总结：位置未明，解释也应留白；先辨认醒来后最真实的感受。"
+              : "一句话总结：水是情绪深度，雾是信息不足；不求看清全程，先确认下一步。",
+            focusPoints: ["当下最模糊的决定是什么", "哪个信息能让你多看清一点", "为自己留一个可以返回的边界"],
+          }
+        : {
+            title: "昨夜之象",
+            coreStatement: "这个梦更适合作为自我观察的线索，而不是对现实的预言。",
+            detailedReading: "已确认的场景、动作和感受仍有空白，因此本次只保留联想性解释。可以先回想梦里最清晰的一帧，再对照近期生活中有没有相似的情绪。",
+            oneLineSummary: "一句话总结：先记住画面，再辨认感受；不必急着为梦下结论。",
+            focusPoints: ["梦里最清晰的画面", "醒来后留下的情绪", "近期是否有相似体验"],
+          };
+
   const interpretation = {
     interpretationId: `interpretation-${structure.dreamId}-r${structure.inputRevision}`,
     inputRevision: structure.inputRevision,
-    title: structure.objects.includes("古井") && structure.objects.includes("蛇") ? "井畔之蛇" : "昨夜之象",
+    title: hasSnake ? (isChase ? "蛇影追逐" : structure.objects.includes("古井") ? "井畔之蛇" : "蛇影之梦") : nonSnakeReading.title,
     dreamSummary: structure.confirmedText,
-    coreStatement:
+    coreStatement: !hasSnake ? nonSnakeReading.coreStatement : isChase
+      ? "被蛇追赶很容易让人带着恐惧醒来，它更像对持续压力或边界感的放大，不是现实危险的预告。" :
       clarificationAnswer === "有"
         ? "梦里的靠近伴随明确威胁，重点是重新确认边界，而不是预言现实会发生坏事。"
         : "别被井边的蛇吓到：它没有攻击，你仍愿意靠近，梦的重点更像是如何面对未知。",
-    detailedReading:
+    detailedReading: !hasSnake ? nonSnakeReading.detailedReading : isChase
+      ? "追逐的关键不在蛇最终代表什么，而在你一直逃跑却无法拉开距离。它可以用来观察近期是否有一件反复逼近、又一直没有处理的事。梦不能预测凶吉；比起继续奔跑，更值得确认自己需要哪种距离、支持或明确边界。" :
       clarificationAnswer === "有"
         ? "蛇的主动靠近让这个梦带有更强的边界提醒。旧宅像熟悉却积压已久的生活背景，古井指向被保存的情绪或记忆，陌生老人则像一个让你放慢观察的角色。梦不能预测现实，但它可能在提醒你：最近若有一件事让你感到被逼近，不必马上对抗，也不要忽略不适；先拉开安全距离、说清界限，再决定是否继续。"
         : clarificationAnswer === "记不清" || !clarificationAnswer
           ? "你记得蛇、古井和靠近，却不确定蛇是否具有攻击性，因此不适合把它说成明确的吉凶。旧宅像熟悉的过去，古井像尚未说清的深层感受，蛇则保留着警觉与变化的双重意味。先把最近让你既担心又好奇的事情写下来，确认事实，再判断是否值得靠近。"
           : "蛇没有主动攻击，你却在害怕中仍愿意靠近，这让梦的重点从“危险”转向“如何面对未知”。旧宅像熟悉却沉积已久的生活背景，古井指向被保存的情绪或记忆，陌生老人更像一个提醒你放慢、观察的角色。真正值得留意的，不是它预示坏事，而是你最近是否正在接近一件既担心又好奇的事。蛇盘在井边而未攻击，说明紧张仍处在可观察、可设边界的阶段；先确认边界，再靠近答案。",
-    oneLineSummary:
+    oneLineSummary: !hasSnake ? nonSnakeReading.oneLineSummary : isChase
+      ? "一句话总结：蛇影是压力，追逐是边界被逼近；先停下来辨认它，再选择如何拉开距离。" :
       clarificationAnswer === "有"
         ? "一句话总结：旧宅是积压，古井是深处，蛇的靠近是边界提醒；先退到安全处，再决定下一步。"
         : clarificationAnswer === "记不清" || !clarificationAnswer
           ? "一句话总结：梦意仍有空白；先分清事实与担心，再决定要不要靠近。"
           : "一句话总结：旧宅是过去，古井是深处，蛇是警觉；带着边界感靠近，答案会比恐惧更清楚。",
-    focusPoints:
+    focusPoints: !hasSnake ? nonSnakeReading.focusPoints : isChase
+      ? ["最近哪件事让你感到一直被追着", "你真正需要的安全距离", "向可信任的人说清压力所在"] :
       clarificationAnswer === "有"
         ? ["最近是否有人或事情越过你的边界", "先恢复安全距离", "把拒绝或需求说清楚"]
         : ["最近那件既担心又想靠近的事", "先确认自己的边界与安全感", "把好奇变成一次小而可控的行动"],
-    certaintyLevel: clarificationAnswer === "记不清" || !clarificationAnswer ? "associative" : "reserved",
+    certaintyLevel: hasSnake
+      ? clarificationAnswer === "记不清" || !clarificationAnswer ? "associative" : "reserved"
+      : isAmbiguousWater
+        ? clarificationAnswer === "岸边" || clarificationAnswer === "水中" ? "reserved" : "associative"
+        : "associative",
     knowledgeBaseVersion: "p3908-bnf-poc-v1",
     workflowVersion: "fixture-workflow-v1",
     evidenceEntryIds: verified.map((entry) => entry.entryId),
